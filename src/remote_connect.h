@@ -3,6 +3,8 @@
 #define REMOTECONNECTH
 // #include <cub/cub.cuh>
 #include <vector>
+#include <fstream>
+
 #include "getRealTime.h"
 // #include "nestgpu.h"
 #include "connect.h"
@@ -210,7 +212,10 @@ addOffsetToExternalNodeIdsKernel( int64_t n_conn,
 
 __global__ void MapIndexToImageNodeKernel( uint n_hosts, uint* host_offset, uint* node_index );
 
-
+// only for debugging
+__global__ void
+checkMapIndexToImageNodeKernel( uint n_hosts, uint* host_offset, uint* node_index, uint *n_map,
+                               uint node_index_size, int this_host);
 
 // Allocate GPU memory for new remote-source-node-map blocks
 template < class ConnKeyT, class ConnStructT >
@@ -682,40 +687,41 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectionMapCalibrate( inode
 
   PRINT_TIME;
 
-  uint n_src_max = 0;
-  
+  uint src_node_max = 0;
+
+  std::vector< std::unordered_set <int> > node_target_host_group_us;
   node_target_host_group_.resize(n_nodes);
+  node_target_host_group_us.resize(n_nodes);
+  
   for (uint group_local_id=1; group_local_id<nhg; group_local_id++) {
     host_group_local_source_node_map_[group_local_id].resize(n_nodes);
     uint nh = host_group_[group_local_id].size(); // number of hosts in the group
     for ( uint gi_host = 0; gi_host < nh; gi_host++ ) {// loop on hosts
       uint n_src = host_group_source_node_[group_local_id][gi_host].size();
-      n_src_max = max(n_src_max, n_src);
+      //n_src_max = max(n_src_max, n_src);
       host_group_source_node_vect_[group_local_id][gi_host].resize(n_src);
       std::copy(host_group_source_node_[group_local_id][gi_host].begin(), host_group_source_node_[group_local_id][gi_host].end(),
 		host_group_source_node_vect_[group_local_id][gi_host].begin());
       
       host_group_local_node_index_[group_local_id][gi_host].resize(n_src);
 
-      /////////////// check that the following is not needed
-      //std::fill(host_group_local_node_index_[group_local_id][gi_host].begin(), host_group_local_node_index_[group_local_id][gi_host].end(), -1);
     }
   }
   
   PRINT_TIME;
-  std::vector<uint> tmp_node_map(n_src_max, 0);
-  
-    
+  std::vector<int64_t> tmp_node_map;
+  //tmp_node_map.resize(src_node_max);
+
   for (uint group_local_id=1; group_local_id<nhg; group_local_id++) {
     uint nh = host_group_[group_local_id].size(); // number of hosts in the group
     for ( uint gi_host = 0; gi_host < nh; gi_host++ ) {// loop on hosts
       int src_host = host_group_[group_local_id][gi_host];
+      ///*
       if ( src_host != this_host_ ) { // skip self host
 	// get number of elements in the map
 	uint n_node_map;
 	gpuErrchk(
 		  cudaMemcpy( &n_node_map, &d_n_remote_source_node_map_[group_local_id][ gi_host ], sizeof( uint ), cudaMemcpyDeviceToHost ) );
-
 	if (n_node_map > 0) {
 	  hc_remote_source_node_map_[group_local_id][gi_host].resize(n_node_map);
 	  hc_image_node_map_[group_local_id][gi_host].resize(n_node_map);
@@ -734,19 +740,44 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectionMapCalibrate( inode
 	    gpuErrchk(cudaMemcpy(&hc_image_node_map_[group_local_id][gi_host][ib*node_map_block_size_],
 				 h_image_node_map_[group_local_id][gi_host][ib], n_elem*sizeof(uint), cudaMemcpyDeviceToHost ));
 	  }
-       
+       	  ///*
+	  bool resize_flag = false;
+	  for (uint i=0; i<n_node_map; i++) {
+	    inode_t src_node = hc_remote_source_node_map_[group_local_id][gi_host][i];
+	    if (src_node>src_node_max) {
+	      resize_flag = true;
+	      src_node_max = src_node;
+	      //std::cerr << "Error. src_node: " << src_node << " greater than n_src_max: " << n_src_max << std::endl;
+	      //exit(0);
+	    }
+	  }
+	  if ( resize_flag ) {
+	    tmp_node_map.resize(src_node_max+1);
+	  }
+	  std::fill(tmp_node_map.begin(), tmp_node_map.end(), -1);
 	  for (uint i=0; i<n_node_map; i++) {
 	    inode_t src_node = hc_remote_source_node_map_[group_local_id][gi_host][i];
 	    tmp_node_map[src_node] = hc_image_node_map_[group_local_id][gi_host][i];
 	  }
+	  
 	  for (uint i=0; i<host_group_source_node_vect_[group_local_id][gi_host].size(); i++) {
 	    inode_t src_node = host_group_source_node_vect_[group_local_id][gi_host][i];
-	    inode_t pos = tmp_node_map[src_node];
+	    int64_t pos;
+	    if (src_node>src_node_max) {
+	      pos = -1;
+	    }
+	    else {
+	      pos = tmp_node_map[src_node];
+	    }
 	    //if (pos<0) {
 	    //  throw ngpu_exception( "source node not found in host map" );
 	    //}
 	    host_group_local_node_index_[group_local_id][gi_host][i] = pos;
 	  }
+	  
+	}
+	else {
+	  std::fill(host_group_local_node_index_[group_local_id][gi_host].begin(), host_group_local_node_index_[group_local_id][gi_host].end(), -1);
 	}
       }
       else { // only in the source, i.e. if src_host == this_host_
@@ -754,15 +785,127 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectionMapCalibrate( inode
 	for (uint i=0; i<n_src; i++) {
 	  inode_t i_source = host_group_source_node_vect_[group_local_id][gi_host][i];
 	  host_group_local_source_node_map_[group_local_id][i_source] = i;
-	  node_target_host_group_[i_source].insert(group_local_id);	  
+	  std::pair<std::unordered_set<int>::iterator, bool> insert_it =
+	    node_target_host_group_us[i_source].insert(group_local_id);
+	  if (insert_it.second){
+	    node_target_host_group_[i_source].push_back(group_local_id);
+	  }
 	}
       }
     }
   }
   PRINT_TIME;
- 
+
   return 0;
 }
+
+template < class ConnKeyT, class ConnStructT >
+int
+ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectionMapSave()
+{
+  std::vector< std::vector< uint > > hc_remote_source_node_map;
+  std::vector< std::vector< uint > > hc_image_node_map;
+  
+  hc_remote_source_node_map.resize(n_hosts_);
+  hc_image_node_map.resize(n_hosts_);
+  
+  for ( int src_host = 0; src_host < n_hosts_; src_host++ ) {// loop on hosts
+    if ( src_host != this_host_ ) { // skip self host
+      // get number of elements in the map
+      uint n_node_map;
+      gpuErrchk(
+		cudaMemcpy( &n_node_map, &d_n_remote_source_node_map_[0][ src_host ], sizeof( uint ), cudaMemcpyDeviceToHost ) );
+      
+      if (n_node_map > 0) {
+	hc_remote_source_node_map[src_host].resize(n_node_map);
+	hc_image_node_map[src_host].resize(n_node_map);
+	// loop on remote-source-node-to-local-image-node map blocks
+	uint n_map_blocks =  h_remote_source_node_map_[0][src_host].size();
+	
+	for (uint ib=0; ib<n_map_blocks; ib++) {
+	  uint n_elem;
+	  if (ib<n_map_blocks-1) {
+	    n_elem = node_map_block_size_;
+	  }
+	  else {
+	    n_elem = (n_node_map - 1) % node_map_block_size_ + 1;
+	  }
+	  gpuErrchk(cudaMemcpy(&hc_remote_source_node_map[src_host][ib*node_map_block_size_],
+			       h_remote_source_node_map_[0][src_host][ib], n_elem*sizeof(uint), cudaMemcpyDeviceToHost ));
+	  gpuErrchk(cudaMemcpy(&hc_image_node_map[src_host][ib*node_map_block_size_],
+			       h_image_node_map_[0][src_host][ib], n_elem*sizeof(uint), cudaMemcpyDeviceToHost ));
+	}
+	
+      }
+      
+      std::string filename = std::string("map_remote_src_") + std::to_string(this_host_) + "_" + std::to_string(src_host) + ".dat";
+      std::ofstream ofs;
+      ofs.open(filename, std::ios::out);      
+      if ( ofs.fail() ) {
+	std::cerr << "Cannot open output file\n"; 
+	exit(-1);
+      }
+      ofs << n_node_map << std::endl;
+      for (uint i=0; i<n_node_map; i++) {
+	ofs << hc_remote_source_node_map[src_host][i] << "\t" << hc_image_node_map[src_host][i] << std::endl;
+      }
+      ofs.close();
+
+    }
+  }
+
+
+  std::vector< std::vector< uint > > hc_local_source_node_map;
+  
+  hc_local_source_node_map.resize(n_hosts_);
+  
+  for ( int tg_host = 0; tg_host < n_hosts_; tg_host++ ) {// loop on hosts
+    if ( tg_host != this_host_ ) { // skip self host
+      // get number of elements in the map
+      uint n_node_map;
+      gpuErrchk(
+		cudaMemcpy( &n_node_map, &d_n_local_source_node_map_[ tg_host ], sizeof( uint ), cudaMemcpyDeviceToHost ) );
+      
+      if (n_node_map > 0) {
+	hc_local_source_node_map[tg_host].resize(n_node_map);
+	// loop on remote-source-node-to-local-image-node map blocks
+	uint n_map_blocks =  h_local_source_node_map_[tg_host].size();
+	
+	for (uint ib=0; ib<n_map_blocks; ib++) {
+	  uint n_elem;
+	  if (ib<n_map_blocks-1) {
+	    n_elem = node_map_block_size_;
+	  }
+	  else {
+	    n_elem = (n_node_map - 1) % node_map_block_size_ + 1;
+	  }
+	  gpuErrchk(cudaMemcpy(&hc_local_source_node_map[tg_host][ib*node_map_block_size_],
+			       h_local_source_node_map_[tg_host][ib], n_elem*sizeof(uint), cudaMemcpyDeviceToHost ));
+	}
+	
+      }
+      
+      std::string filename = std::string("map_local_src_") + std::to_string(this_host_) + "_" + std::to_string(tg_host) + ".dat";
+      std::ofstream ofs;
+      ofs.open(filename, std::ios::out);      
+      if ( ofs.fail() ) {
+	std::cerr << "Cannot open output file\n"; 
+	exit(-1);
+      }
+      ofs << n_node_map << std::endl;
+      for (uint i=0; i<n_node_map; i++) {
+	ofs << hc_local_source_node_map[tg_host][i] << std::endl;
+      }
+      ofs.close();
+
+    }
+  }
+  
+  return 0;
+}
+
+
+
 
 template < class ConnKeyT, class ConnStructT >
 int
@@ -1536,7 +1679,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::CreateHostGroup(int *host_arr, int 
     host_group_source_node_vect_.push_back(empty_node_vect);
     
     host_group_local_source_node_map_.push_back(std::vector< uint >());
-    std::vector< std::vector< int > > hg_lni(hg.size(), std::vector< int >());
+    std::vector< std::vector< int64_t > > hg_lni(hg.size(), std::vector< int64_t >());
     host_group_local_node_index_.push_back(hg_lni);
   }
 #ifdef HAVE_MPI
