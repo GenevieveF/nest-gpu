@@ -354,6 +354,32 @@ public:
   // Method that creates a group of hosts for remote spike communication (i.e. a group of MPI processes)
   // host_arr: array of host inexes, n_hosts: nomber of hosts in the group
   virtual int CreateHostGroup(int *host_arr, int n_hosts, bool mpi_flag) = 0;
+
+
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////
+  // Build connections with fixed indegree rule for source neurons and target neurons distributed across
+  // MPI processes (hosts)
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////
+  virtual int connectDistributedFixedIndegree
+  (int *source_host_arr, int n_source_host, inode_t *h_source_arr, inode_t *n_source_arr,
+   int *target_host_arr, int n_target_host, inode_t *h_target_arr, inode_t *n_target_arr,
+   int indegree, int i_host_group, SynSpec &syn_spec) = 0;
+
+  virtual int connectDistributedFixedIndegree
+  (int *source_host_arr, int n_source_host, inode_t **h_source_arr, inode_t *n_source_arr,
+   int *target_host_arr, int n_target_host, inode_t *h_target_arr, inode_t *n_target_arr,
+   int indegree, int i_host_group, SynSpec &syn_spec) = 0;
+
+  virtual int connectDistributedFixedIndegree
+  (int *source_host_arr, int n_source_host, inode_t *h_source_arr, inode_t *n_source_arr,
+   int *target_host_arr, int n_target_host, inode_t **h_target_arr, inode_t *n_target_arr,
+   int indegree, int i_host_group, SynSpec &syn_spec) = 0;
+
+  virtual int connectDistributedFixedIndegree
+  (int *source_host_arr, int n_source_host, inode_t **h_source_arr, inode_t *n_source_arr,
+   int *target_host_arr, int n_target_host, inode_t **h_target_arr, inode_t *n_target_arr,
+   int indegree, int i_host_group, SynSpec &syn_spec) = 0;
+
 };
 
 
@@ -1084,6 +1110,63 @@ public:
     ConnSpec& conn_spec,
     SynSpec& syn_spec );
 
+
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////
+  // Build connections with fixed indegree rule for source neurons and target neurons distributed across
+  // MPI processes (hosts)
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////
+  int connectDistributedFixedIndegree
+  (int *source_host_arr, int n_source_host, inode_t *h_source_arr, inode_t *n_source_arr,
+   int *target_host_arr, int n_target_host, inode_t *h_target_arr, inode_t *n_target_arr,
+   int indegree, int i_host_group, SynSpec &syn_spec)
+  {
+    return _ConnectDistributedFixedIndegree< inode_t, inode_t >
+      (source_host_arr, n_source_host, h_source_arr, n_source_arr,
+       target_host_arr, n_target_host, h_target_arr, n_target_arr,
+       indegree, i_host_group, syn_spec);
+  }
+
+  int connectDistributedFixedIndegree
+  (int *source_host_arr, int n_source_host, inode_t **h_source_arr, inode_t *n_source_arr,
+   int *target_host_arr, int n_target_host, inode_t *h_target_arr, inode_t *n_target_arr,
+   int indegree, int i_host_group, SynSpec &syn_spec)
+  {
+    return _ConnectDistributedFixedIndegree< inode_t*, inode_t >
+      (source_host_arr, n_source_host, h_source_arr, n_source_arr,
+       target_host_arr, n_target_host, h_target_arr, n_target_arr,
+       indegree, i_host_group, syn_spec);
+  }
+
+  int connectDistributedFixedIndegree
+  (int *source_host_arr, int n_source_host, inode_t *h_source_arr, inode_t *n_source_arr,
+   int *target_host_arr, int n_target_host, inode_t **h_target_arr, inode_t *n_target_arr,
+   int indegree, int i_host_group, SynSpec &syn_spec)
+  {
+    return _ConnectDistributedFixedIndegree< inode_t, inode_t* >
+      (source_host_arr, n_source_host, h_source_arr, n_source_arr,
+       target_host_arr, n_target_host, h_target_arr, n_target_arr,
+       indegree, i_host_group, syn_spec);
+  }
+
+  int connectDistributedFixedIndegree
+  (int *source_host_arr, int n_source_host, inode_t **h_source_arr, inode_t *n_source_arr,
+   int *target_host_arr, int n_target_host, inode_t **h_target_arr, inode_t *n_target_arr,
+   int indegree, int i_host_group, SynSpec &syn_spec)
+  {
+    return _ConnectDistributedFixedIndegree< inode_t*, inode_t* >
+      (source_host_arr, n_source_host, h_source_arr, n_source_arr,
+       target_host_arr, n_target_host, h_target_arr, n_target_arr,
+       indegree, i_host_group, syn_spec);
+  }
+
+  
+  template < class T1, class T2 >
+  int _ConnectDistributedFixedIndegree
+  (int *source_host_arr, int n_source_host, T1* h_source_arr, inode_t *n_source_arr,
+   int *target_host_arr, int n_target_host, T2 *h_target_arr, inode_t *n_target_arr,
+   int indegree, int i_host_group, SynSpec &syn_spec);
+
+  
   int addOffsetToExternalNodeIds( uint n_local_nodes );
 
   // REMOTE CONNECT FUNCTION for target_host matching this_host
@@ -2309,7 +2392,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::init()
   // member variables initialization
   distribution_ = NULL;
 
-  conn_block_size_ = 10000000;
+  conn_block_size_ = 3; //10000000;
 
   n_conn_ = 0;
 
@@ -2587,14 +2670,16 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::organizeConnections( inode_t n_node
     printf( "Allocating auxiliary GPU memory...\n" );
     int64_t sort_storage_bytes = 0;
     void* d_sort_storage = NULL;
-    copass_sort::sort< ConnKeyT, ConnStructT >(
-      conn_key_vect_.data(), conn_struct_vect_.data(), n_conn_, conn_block_size_, d_sort_storage, sort_storage_bytes );
+    copass_sort::sort< ConnKeyT, ConnStructT >
+      (conn_key_vect_.data(), conn_struct_vect_.data(), n_conn_,
+       conn_block_size_, d_sort_storage, sort_storage_bytes, 0 );
     printf( "storage bytes: %ld\n", sort_storage_bytes );
     CUDAMALLOCCTRL( "&d_sort_storage", &d_sort_storage, sort_storage_bytes );
 
     printf( "Sorting...\n" );
-    copass_sort::sort< ConnKeyT, ConnStructT >(
-      conn_key_vect_.data(), conn_struct_vect_.data(), n_conn_, conn_block_size_, d_sort_storage, sort_storage_bytes );
+    copass_sort::sort< ConnKeyT, ConnStructT >
+      (conn_key_vect_.data(), conn_struct_vect_.data(), n_conn_,
+       conn_block_size_, d_sort_storage, sort_storage_bytes, 0 );
     CUDAFREECTRL( "d_sort_storage", d_sort_storage );
 
     // It is important to separate number of allocated blocks
@@ -3963,7 +4048,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::buildDirectConnections( inode_t i_n
     k,
     &( ( ( ConnKeyT* ) poiss_conn::d_poiss_thresh )[ 0 ] ),
     d_num0,
-    &poiss_conn::d_poiss_sum[ 0 ] );
+    &poiss_conn::d_poiss_sum[ 0 ], 0 );
   CUDASYNC;
 
   search_multi_down< ConnKeyT, regular_block_array< ConnKeyT >, 1024 >(
@@ -3971,7 +4056,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::buildDirectConnections( inode_t i_n
     k,
     &( ( ( ConnKeyT* ) poiss_conn::d_poiss_thresh )[ 1 ] ),
     d_num1,
-    &poiss_conn::d_poiss_sum[ 1 ] );
+    &poiss_conn::d_poiss_sum[ 1 ], 0 );
   CUDASYNC;
 
   gpuErrchk( cudaMemcpy( h_poiss_num, poiss_conn::d_poiss_num, 2 * k * sizeof( int64_t ), cudaMemcpyDeviceToHost ) );

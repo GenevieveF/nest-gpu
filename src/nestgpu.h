@@ -936,6 +936,50 @@ public:
   int RecvSpikeFromRemote();
 
   int organizeExternalSpikes( int n_ext_spikes );
+
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////
+  // Build connections with fixed indegree rule for source neurons and target neurons distributed across
+  // MPI processes (hosts)
+  // Case with both source and target nodes contiguous, represented by starting index and number of nodes 
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////
+  int ConnectDistributedFixedIndegree
+  (int *source_host_arr, int n_source_host, inode_t *source_arr, inode_t *n_source_arr,
+   int *target_host_arr, int n_target_host, inode_t *target_arr, inode_t *n_target_arr,
+   int indegree, int i_host_group, SynSpec &syn_spec);
+  
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////
+  // Build connections with fixed indegree rule for source neurons and target neurons distributed across
+  // MPI processes (hosts)
+  // Case with source nodes stored in an array,
+  // target nodes contiguous, represented by starting index and number of nodes 
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////
+  int ConnectDistributedFixedIndegree
+  (int *source_host_arr, int n_source_host, inode_t **source_arr, inode_t *n_source_arr,
+   int *target_host_arr, int n_target_host, inode_t *target_arr, inode_t *n_target_arr,
+   int indegree, int i_host_group, SynSpec &syn_spec);
+
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////
+  // Build connections with fixed indegree rule for source neurons and target neurons distributed across
+  // MPI processes (hosts)
+  // Case with source nodes contiguous, represented by starting index and number of nodes,
+  // target nodes stored in an array
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////
+  int ConnectDistributedFixedIndegree
+  (int *source_host_arr, int n_source_host, inode_t *source_arr, inode_t *n_source_arr,
+   int *target_host_arr, int n_target_host, inode_t **target_arr, inode_t *n_target_arr,
+   int indegree, int i_host_group, SynSpec &syn_spec);
+
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////
+  // Build connections with fixed indegree rule for source neurons and target neurons distributed across
+  // MPI processes (hosts)
+  // Case with both source nodes and target nodes stored in arrays
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////
+  int ConnectDistributedFixedIndegree
+  (int *source_host_arr, int n_source_host, inode_t **source_arr, inode_t *n_source_arr,
+   int *target_host_arr, int n_target_host, inode_t **target_arr, inode_t *n_target_arr,
+   int indegree, int i_host_group, SynSpec &syn_spec);
+
+  
 };
 
 #endif
