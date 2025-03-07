@@ -252,6 +252,7 @@ NESTGPU::NESTGPU()
   
   SynSpec syn_spec(0, 1.0, 0.1);
   ConnSpec conn_spec(ONE_TO_ONE);
+  //Connect(1, 5, 7, 5, conn_spec, syn_spec);
   Connect(1, 5, 7, 5, conn_spec, syn_spec);
   ConnectDistributedFixedIndegree
     (source_host_arr, n_source_host, source_arr, n_source_arr, target_host_arr, n_target_host, target_arr, n_target_arr, indegree, i_host_group, syn_spec);

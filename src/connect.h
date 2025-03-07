@@ -940,6 +940,16 @@ public:
     bool remote_source_flag );
 
   template < class T1, class T2 >
+  int connectAssignedNodes( curandGenerator_t& gen,
+    T1 source,
+    inode_t n_source,
+    T2 target,
+    inode_t n_target,
+    int64_t total_num,
+    SynSpec& syn_spec,
+    bool remote_source_flag );
+
+  template < class T1, class T2 >
   int connectFixedIndegree( curandGenerator_t& gen,
     T1 source,
     inode_t n_source,
@@ -2392,7 +2402,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::init()
   // member variables initialization
   distribution_ = NULL;
 
-  conn_block_size_ = 3; //10000000;
+  conn_block_size_ = 3; // 4; // 3; //10000000;
 
   n_conn_ = 0;
 
@@ -2992,6 +3002,10 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_Connect( curandGenerator_t& gen,
     return connectFixedOutdegree< T1, T2 >(
       gen, source, n_source, target, n_target, conn_spec.outdegree_, syn_spec, remote_source_flag );
     break;
+  case ASSIGNED_NODES:
+    return connectAssignedNodes< T1, T2 >(
+      gen, source, n_source, target, n_target, conn_spec.total_num_, syn_spec, remote_source_flag );
+    break;
   default:
     throw ngpu_exception( "Unknown connection rule" );
   }
@@ -3262,6 +3276,132 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::connectFixedTotalNumber( curandGene
 
   return 0;
 }
+
+//////////////////////// TEMPORARY
+
+// Print connections in a block all info
+template < class ConnKeyT, class ConnStructT >
+__global__ void
+printConnectionsFull1
+( ConnKeyT* conn_key_subarray, ConnStructT* conn_struct_subarray, int64_t n_conn)
+{
+  int64_t i_conn = threadIdx.x + blockIdx.x * blockDim.x;
+  if ( i_conn >= n_conn ) {
+    return;
+  }
+  inode_t source = getConnSource< ConnKeyT >( conn_key_subarray[ i_conn ] );
+  inode_t target = getConnTarget< ConnStructT >( conn_struct_subarray[ i_conn ] );
+  uint i_delay = getConnDelay< ConnKeyT >( conn_key_subarray[ i_conn ] );
+  int i_port = getConnPort< ConnKeyT, ConnStructT >( conn_key_subarray[ i_conn ], conn_struct_subarray[ i_conn ] );
+  int i_syn = getConnSyn< ConnKeyT, ConnStructT >( conn_key_subarray[ i_conn ], conn_struct_subarray[ i_conn ] );
+  float weight = conn_struct_subarray[ i_conn ].weight;
+
+  printf("printConnections i_conn: %lld, i_source: %d, i_target: %d, i_port: %d, i_delay: %d, i_syn: %d, w: %f\n",
+	 i_conn, source, target, i_port, i_delay, i_syn, weight);
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/////////////////////////////////
+
+
+template < class ConnKeyT, class ConnStructT >
+template < class T1, class T2 >
+int
+ConnectionTemplate< ConnKeyT, ConnStructT >::connectAssignedNodes( curandGenerator_t& src_gen,
+  T1 source,
+  inode_t n_source,
+  T2 target,
+  inode_t n_target,
+  int64_t total_num,
+  SynSpec& syn_spec,
+  bool remote_source_flag )
+{
+  if ( total_num == 0 )
+  {
+    return 0;
+  }
+  int64_t old_n_conn = n_conn_;
+  int64_t n_new_conn = total_num;
+  n_conn_ += n_new_conn; // new number of connections
+  int new_n_block = ( int ) ( ( n_conn_ + conn_block_size_ - 1 ) / conn_block_size_ );
+
+  if ( remote_source_flag ) {
+    return 0;
+  }
+  
+  // allocateNewBlocks( new_n_block ); should be already allocated for this connection rule
+  
+  printf("Generating connections with assigned-nodes rule...\n");
+  printf("old_n_conn: %ld, n_new_conn: %ld, n_conn_: %ld\n", old_n_conn, n_new_conn, n_conn_);
+  
+  int ib0 = ( int ) ( old_n_conn / conn_block_size_ );
+  printf("ib0: %d\tnew_n_block: %d\n", ib0, new_n_block); 
+  for ( int ib = ib0; ib < new_n_block; ib++ )
+  {
+    int64_t n_block_conn; // number of connections in a block
+    int64_t i_conn0;      // index of first connection in a block
+    if ( new_n_block == ib0 + 1 )
+    { // all connections are in the same block
+      i_conn0 = old_n_conn % conn_block_size_;
+      n_block_conn = n_new_conn;
+    }
+    else if ( ib == ib0 )
+    { // first block
+      i_conn0 = old_n_conn % conn_block_size_;
+      n_block_conn = conn_block_size_ - i_conn0;
+    }
+    else if ( ib == new_n_block - 1 )
+    { // last block
+      i_conn0 = 0;
+      n_block_conn = ( n_conn_ - 1 ) % conn_block_size_ + 1;
+    }
+    else
+    {
+      i_conn0 = 0;
+      n_block_conn = conn_block_size_;
+    }
+    printf("ib: %d\ti_conn0: %ld\tn_block_conn: %ld\n", ib, i_conn0, n_block_conn);
+    printf("ok0\n");
+    fflush(stdout);
+    setConnectionWeights(
+      local_rnd_gen_, d_conn_storage_, conn_struct_vect_[ ib ] + i_conn0, n_block_conn, syn_spec );
+    printf("ok1\n");
+    fflush(stdout);
+
+    setConnectionDelays( local_rnd_gen_, d_conn_storage_, conn_key_vect_[ ib ] + i_conn0, n_block_conn, syn_spec );
+    printf("ok2\n");
+    fflush(stdout);
+    setPort< ConnKeyT, ConnStructT > <<< ( n_block_conn + 1023 ) / 1024, 1024 >>>(
+      conn_key_vect_[ ib ] + i_conn0, conn_struct_vect_[ ib ] + i_conn0, syn_spec.port_, n_block_conn );
+    DBGCUDASYNC;
+    printf("ok3\n");
+    fflush(stdout);
+
+    setSynGroup< ConnKeyT, ConnStructT > <<< ( n_block_conn + 1023 ) / 1024, 1024 >>>(
+      conn_key_vect_[ ib ] + i_conn0, conn_struct_vect_[ ib ] + i_conn0, syn_spec.syn_group_, n_block_conn );
+    DBGCUDASYNC;
+    printf("ok0\n");
+    fflush(stdout);
+
+
+    printf("----------------------------------------------------------------------\n");
+    printf("block: %d\n", ib);
+    CUDASYNC;
+    fflush(stdout);
+    printConnectionsFull1< ConnKeyT, ConnStructT > <<< ( n_block_conn + 1023 ) / 1024, 1024 >>>
+      (conn_key_vect_[ ib ] + i_conn0, conn_struct_vect_[ ib ] + i_conn0, n_block_conn);
+    CUDASYNC;
+    fflush(stdout);
+    printf("----------------------------------------------------------------------\n");
+    fflush(stdout);
+
+    
+  }
+
+  return 0;
+}
+
 
 template < class ConnKeyT, class ConnStructT >
 template < class T1, class T2 >

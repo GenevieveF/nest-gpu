@@ -57,7 +57,7 @@ ConnSpec::Init( int rule, int degree /*=0*/ )
     throw ngpu_exception( std::string( "Connection rule " ) + conn_rule_name[ rule ] + " does not have a degree" );
   }
   rule_ = rule;
-  if ( rule == FIXED_TOTAL_NUMBER )
+  if ( rule == FIXED_TOTAL_NUMBER || rule == ASSIGNED_NODES )
   {
     total_num_ = degree;
   }
