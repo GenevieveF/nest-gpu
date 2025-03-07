@@ -2013,12 +2013,13 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
     // Locate (search) the current element of the n_source_cumul array in the conn_key_vect_ block
     int64_t value = n_source_cumul[ish+1];
     printf("ish: %d\tvalue: %ld\n", ish, value);
-    int64_t h_position = -1;
-    int ib;
+    
+    int64_t n_block_conn; // number of new connections in the current block of the loop
+    int64_t i_conn0;      // index of first new connection in this block
+    int64_t h_position = -1; // position of first connection of current partition in the connection block
+    int ib; // index of loop on connection blocks
     // Loop on connection blocks where new connections are stored
     for (ib = ib1; ib < new_n_block; ib++ ) {
-      int64_t n_block_conn; // number of new connections in the current block of the loop
-      int64_t i_conn0;      // index of first new connection in this block
       if ( new_n_block == ib1 + 1 ) // all connections are in the same block
       { // all connections are in the same block
 	i_conn0 = part_conn0 % conn_block_size_;
@@ -2081,15 +2082,18 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
     if (h_position < 0) {
       throw ngpu_exception( "Search error in partitioning new connections in _ConnectDistrubutedFixedIndegree" );
     }
-    if (ib == new_n_block) { xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-      ib1 = ib;
-      h_position = 0;
+    int64_t part_conn1;
+    int64_t n_new_conn;
+    if (ib == new_n_block) { // last block passed
+      // compute index of the last connection of the current partition + 1
+      part_conn1 = (new_n_block - 1) * conn_block_size_ + n_block_conn;
     }
-    
-    // compute index of the last connection of the current partition + 1
-    int64_t part_conn1 = ib1 * conn_block_size_ + h_position;
+    else { // not over the last block
+      // compute index of the last connection of the current partition + 1
+      part_conn1 = ib1 * conn_block_size_ + h_position;
+    }
     // compute number of connections in current partition
-    int64_t n_new_conn = part_conn1 - part_conn0;
+    n_new_conn = part_conn1 - part_conn0;
     printf("part_conn1: %ld\tn_new_conn %ld\n", part_conn1, n_new_conn); 
 
     // Now we must subtract n_source_cumul[ish] and convert the source node indexes to the ConnKeyT representation
@@ -2146,7 +2150,11 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
     // using a new connection rule that uses already created connections
     // filled only with source node relative indexes and target node
     // indexes and fills them with weights, delays, syn_geoups, ports
-    
+
+
+    if (ib == new_n_block) { // last block passed, exit loop
+      break;
+    }
     part_conn0 = part_conn1; // update index of the first connection of the next partition
 
 
