@@ -4043,20 +4043,16 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::buildDirectConnections( inode_t i_n
   int64_t* h_num0 = &h_poiss_num[ 0 ];
   int64_t* h_num1 = &h_poiss_num[ k ];
 
-  search_multi_down< ConnKeyT, regular_block_array< ConnKeyT >, 1024 >(
-    ( regular_block_array< ConnKeyT >* ) poiss_conn::d_poiss_subarray,
-    k,
-    &( ( ( ConnKeyT* ) poiss_conn::d_poiss_thresh )[ 0 ] ),
-    d_num0,
-    &poiss_conn::d_poiss_sum[ 0 ], 0 );
+  search_multi_down< ConnKeyT, regular_block_array< ConnKeyT >, 1024 >
+    (( regular_block_array< ConnKeyT >* ) poiss_conn::d_poiss_subarray,
+    k, &( ( ( ConnKeyT* ) poiss_conn::d_poiss_thresh )[ 0 ] ),
+    d_num0, &poiss_conn::d_poiss_sum[ 0 ]);
   CUDASYNC;
 
-  search_multi_down< ConnKeyT, regular_block_array< ConnKeyT >, 1024 >(
-    ( regular_block_array< ConnKeyT >* ) poiss_conn::d_poiss_subarray,
-    k,
-    &( ( ( ConnKeyT* ) poiss_conn::d_poiss_thresh )[ 1 ] ),
-    d_num1,
-    &poiss_conn::d_poiss_sum[ 1 ], 0 );
+  search_multi_down< ConnKeyT, regular_block_array< ConnKeyT >, 1024 >
+    (( regular_block_array< ConnKeyT >* ) poiss_conn::d_poiss_subarray,
+    k, &( ( ( ConnKeyT* ) poiss_conn::d_poiss_thresh )[ 1 ] ),
+    d_num1, &poiss_conn::d_poiss_sum[ 1 ]);
   CUDASYNC;
 
   gpuErrchk( cudaMemcpy( h_poiss_num, poiss_conn::d_poiss_num, 2 * k * sizeof( int64_t ), cudaMemcpyDeviceToHost ) );

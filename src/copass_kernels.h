@@ -227,13 +227,11 @@ array_Sort( contiguous_key_value< KeyT, ValueT >& arr )
 
 template < class KeyT, class ValueT >
 void
-array_GPUSort( contiguous_key_value< KeyT, ValueT >& arr_in, void* d_storage, int64_t& ext_st_bytes,
-	       int skip)
+array_GPUSort( contiguous_key_value< KeyT, ValueT >& arr_in, void* d_storage, int64_t& ext_st_bytes )
 {
+  DBGCUDASYNC;
   ext_st_bytes = 0;
-  int num_elems = arr_in.size - skip;
-  printf("arr_in.size: %ld\tskip: %d\t, num_elems: %d\n",
-	 arr_in.size, skip, num_elems);
+  int num_elems = arr_in.size;
   contiguous_key_value< KeyT, ValueT > arr_out;
   arr_out.offset = 0;
   arr_out.size = num_elems;
@@ -243,34 +241,42 @@ array_GPUSort( contiguous_key_value< KeyT, ValueT >& arr_in, void* d_storage, in
   void* dummy_pt;
   cudaReusableAlloc( d_storage, ext_st_bytes, &dummy_pt, 1, 256 );
 
+  //printf("arr_in.key_pt: %lld, arr_in.offset: %ld\n",
+  //	 (unsigned long long)arr_in.key_pt, arr_in.offset); 
+  //printf("arr_in.value_pt: %lld, num_elems: %d\n",
+  //	 (unsigned long long)arr_in.value_pt, num_elems); 
+  
+  DBGCUDASYNC;
   size_t sort_storage_bytes = 0;
   //<BEGIN-CLANG-TIDY-SKIP>//
   cub::DeviceRadixSort::SortPairs( NULL,
     sort_storage_bytes,
-    arr_in.key_pt + arr_in.offset + skip,
+    arr_in.key_pt + arr_in.offset,
     arr_out.key_pt,
-    arr_in.value_pt + arr_in.offset + skip,
+    arr_in.value_pt + arr_in.offset,
     arr_out.value_pt,
     num_elems );
   //<END-CLANG-TIDY-SKIP>//
-
+  DBGCUDASYNC;
+  
   if ( d_storage != NULL )
   {
     void* d_sort_storage = ( void* ) ( ( char* ) d_storage + ext_st_bytes );
     //<BEGIN-CLANG-TIDY-SKIP>//
     cub::DeviceRadixSort::SortPairs( d_sort_storage,
       sort_storage_bytes,
-      arr_in.key_pt + arr_in.offset + skip,
+      arr_in.key_pt + arr_in.offset,
       arr_out.key_pt,
-      arr_in.value_pt + arr_in.offset + skip,
+      arr_in.value_pt + arr_in.offset,
       arr_out.value_pt,
       num_elems );
     //<END-CLANG-TIDY-SKIP>//
-
+    
+    DBGCUDASYNC;
     gpuErrchk( cudaMemcpyAsync(
-      arr_in.key_pt + arr_in.offset + skip, arr_out.key_pt, num_elems * sizeof( KeyT ), cudaMemcpyDeviceToDevice ) );
+      arr_in.key_pt + arr_in.offset, arr_out.key_pt, num_elems * sizeof( KeyT ), cudaMemcpyDeviceToDevice ) );
     gpuErrchk( cudaMemcpy(
-      arr_in.value_pt + arr_in.offset + skip, arr_out.value_pt, num_elems * sizeof( ValueT ), cudaMemcpyDeviceToDevice ) );
+      arr_in.value_pt + arr_in.offset, arr_out.value_pt, num_elems * sizeof( ValueT ), cudaMemcpyDeviceToDevice ) );
   }
 
   ext_st_bytes += sort_storage_bytes;
@@ -327,16 +333,20 @@ getBlock( regular_block_key_value< KeyT, ValueT >& arr, int i_block )
   contiguous_key_value< KeyT, ValueT > c_arr;
   c_arr.key_pt = arr.key_pt[ i_block ];
   c_arr.value_pt = arr.value_pt[ i_block ];
-  c_arr.offset = 0;
+  c_arr.offset = (i_block == 0) ? arr.offset : 0;
 
-  position_t diff = arr.size - i_block * arr.block_size;
-  if ( diff <= 0 )
-  {
-    printf( "i_block out of range in getBlock\n" );
-    exit( 0 );
+  if (i_block == 0) {
+    c_arr.size = std::min( arr.size, arr.block_size - arr.offset);
   }
-  c_arr.size = std::min( diff, arr.block_size );
-
+  else {
+    position_t diff = arr.size + arr.offset - i_block * arr.block_size;
+    if ( diff <= 0 ) {
+      printf( "i_block out of range in getBlock\n" );
+      exit( EXIT_FAILURE );
+    }
+    c_arr.size = std::min( diff, arr.block_size );
+  }
+  
   return c_arr;
 }
 
@@ -469,7 +479,7 @@ array_Sort( contiguous_array< ElementT >& arr )
 
 template < class ElementT >
 void
-array_GPUSort( contiguous_array< ElementT >& arr_in, void* d_storage, int64_t& ext_st_bytes, int skip )
+array_GPUSort( contiguous_array< ElementT >& arr_in, void* d_storage, int64_t& ext_st_bytes )
 {
   ext_st_bytes = 0;
   int num_elems = arr_in.size;
@@ -484,7 +494,7 @@ array_GPUSort( contiguous_array< ElementT >& arr_in, void* d_storage, int64_t& e
   size_t sort_storage_bytes = 0;
   //<BEGIN-CLANG-TIDY-SKIP>//
   cub::DeviceRadixSort::SortKeys(
-    NULL, sort_storage_bytes, arr_in.data_pt + arr_in.offset + skip, arr_out.data_pt, num_elems );
+    NULL, sort_storage_bytes, arr_in.data_pt + arr_in.offset, arr_out.data_pt, num_elems );
   //<END-CLANG-TIDY-SKIP>//
 
   if ( d_storage != NULL )
@@ -492,11 +502,11 @@ array_GPUSort( contiguous_array< ElementT >& arr_in, void* d_storage, int64_t& e
     void* d_sort_storage = ( void* ) ( ( char* ) d_storage + ext_st_bytes );
     //<BEGIN-CLANG-TIDY-SKIP>//
     cub::DeviceRadixSort::SortKeys(
-      d_sort_storage, sort_storage_bytes, arr_in.data_pt + arr_in.offset + skip, arr_out.data_pt, num_elems );
+      d_sort_storage, sort_storage_bytes, arr_in.data_pt + arr_in.offset, arr_out.data_pt, num_elems );
     //<END-CLANG-TIDY-SKIP>//
 
     gpuErrchk( cudaMemcpy(
-      arr_in.data_pt + arr_in.offset + skip, arr_out.data_pt, num_elems * sizeof( ElementT ), cudaMemcpyDeviceToDevice ) );
+      arr_in.data_pt + arr_in.offset, arr_out.data_pt, num_elems * sizeof( ElementT ), cudaMemcpyDeviceToDevice ) );
   }
 
   ext_st_bytes += sort_storage_bytes;
@@ -510,16 +520,20 @@ getBlock( regular_block_array< ElementT >& arr, int i_block )
 {
   contiguous_array< ElementT > c_arr;
   c_arr.data_pt = arr.data_pt[ i_block ];
-  c_arr.offset = 0;
-
-  position_t diff = arr.size - i_block * arr.block_size;
-  if ( diff <= 0 )
-  {
-    printf( "i_block out of range in getBlock\n" );
-    exit( 0 );
+  c_arr.offset = (i_block == 0) ? arr.offset : 0;
+  
+  if (i_block == 0) {
+    c_arr.size = std::min( arr.size, arr.block_size - arr.offset);
   }
-  c_arr.size = std::min( diff, arr.block_size );
-
+  else {
+    position_t diff = arr.size + arr.offset - i_block * arr.block_size;
+    if ( diff <= 0 ) {
+      printf( "i_block out of range in getBlock\n" );
+      exit( EXIT_FAILURE );
+    }
+    c_arr.size = std::min( diff, arr.block_size );
+  }
+  
   return c_arr;
 }
 
@@ -600,17 +614,17 @@ __global__ void case2_inc_partitions_kernel( position_t* part_size, int* sorted_
 // The array must be sorted, otherwise the behavior will be unpredictable
 template < class KeyT, class ArrayT, uint bsize >
 __device__ void
-search_block_up( ArrayT array, position_t size, KeyT val, position_t* num_up, int skip )
+search_block_up( ArrayT array, position_t size, KeyT val, position_t* num_up )
 {
   __shared__ position_t left;
   __shared__ position_t right;
 
   int tid = threadIdx.x;
-  if ( size <= skip || getKey( array, skip ) > val )
+  if ( size == 0 || getKey( array, 0 ) > val )
   {
     if ( tid == 0 )
     {
-      *num_up = min((position_t)skip, size);
+      *num_up = 0;
     }
     return;
   }
@@ -625,7 +639,7 @@ search_block_up( ArrayT array, position_t size, KeyT val, position_t* num_up, in
 
   if ( tid == 0 )
   {
-    left = skip;
+    left = 0;
     right = size - 1;
     // printf("search_block_up bid:%d tid:0 size:%d\n", (int)blockIdx.x, (int)size);
     // printf("search_block_up arr[0]: %d arr[n-1] %d val %d\n", (int)getKey(array, 0),
@@ -677,14 +691,11 @@ search_block_up( ArrayT array, position_t size, KeyT val, position_t* num_up, in
 
 template < class KeyT, class ArrayT, uint bsize >
 __global__ void
-search_multi_up_kernel( ArrayT* subarray, KeyT* val_pt, position_t* num_up, position_t* sum_num_up, int skip )
+search_multi_up_kernel( ArrayT* subarray, KeyT* val_pt, position_t* num_up, position_t* sum_num_up )
 {
   int bid = blockIdx.x;
-  if (bid > 0) {
-    skip = 0;
-  }
   KeyT val = *val_pt;
-  search_block_up< KeyT, ArrayT, bsize >( subarray[ bid ], subarray[ bid ].size, val, &num_up[ bid ], skip );
+  search_block_up< KeyT, ArrayT, bsize >( subarray[ bid ], subarray[ bid ].size, val, &num_up[ bid ] );
   if ( threadIdx.x == 0 )
   {
     atomicAdd( ( uposition_t* ) sum_num_up, num_up[ bid ] );
@@ -697,17 +708,17 @@ search_multi_up_kernel( ArrayT* subarray, KeyT* val_pt, position_t* num_up, posi
 // The array must be sorted, otherwise the behavior will be unpredictable
 template < class KeyT, class ArrayT, uint bsize >
 __device__ void
-search_block_down( ArrayT array, position_t size, KeyT val, position_t* num_down, int skip )
+search_block_down( ArrayT array, position_t size, KeyT val, position_t* num_down )
 {
   __shared__ position_t left;
   __shared__ position_t right;
 
   int tid = threadIdx.x;
-  if ( size <= skip || getKey( array, skip ) >= val )
+  if ( size == 0 || getKey( array, 0 ) >= val )
   {
     if ( tid == 0 )
     {
-      *num_down = min((position_t)skip, size);
+      *num_down = 0;
     }
     return;
   }
@@ -722,7 +733,7 @@ search_block_down( ArrayT array, position_t size, KeyT val, position_t* num_down
 
   if ( tid == 0 )
   {
-    left = skip;
+    left = 0;
     right = size - 1;
     // printf("search_block_down bid:%d tid:0 size:%d\n", (int)blockIdx.x, (int)size);
     // printf("search_block_down arr[0]: %d arr[n-1] %d val %d\n", (int)getKey(array, 0),
@@ -774,14 +785,11 @@ search_block_down( ArrayT array, position_t size, KeyT val, position_t* num_down
 
 template < class KeyT, class ArrayT, uint bsize >
 __global__ void
-search_multi_down_kernel( ArrayT* subarray, KeyT* val_pt, position_t* num_down, position_t* sum_num_down, int skip )
+search_multi_down_kernel( ArrayT* subarray, KeyT* val_pt, position_t* num_down, position_t* sum_num_down )
 {
   int bid = blockIdx.x;
-  if (bid > 0) {
-    skip = 0;
-  }
   KeyT val = *val_pt;
-  search_block_down< KeyT, ArrayT, bsize >( subarray[ bid ], subarray[ bid ].size, val, &num_down[ bid ], skip );
+  search_block_down< KeyT, ArrayT, bsize >( subarray[ bid ], subarray[ bid ].size, val, &num_down[ bid ] );
   if ( threadIdx.x == 0 )
   {
     atomicAdd( ( uposition_t* ) sum_num_down, num_down[ bid ] );
@@ -924,7 +932,7 @@ search_down( ElementT* array, position_t size, ElementT val, position_t* num_dow
   contiguous_array< ElementT > arr;
   arr.data_pt = array;
   arr.offset = 0;
-  search_block_down< ElementT, contiguous_array< ElementT >, bsize >( arr, size, val, num_down, 0 );
+  search_block_down< ElementT, contiguous_array< ElementT >, bsize >( arr, size, val, num_down );
 }
 
 // Find number of elements <= val
@@ -936,15 +944,15 @@ search_up( ElementT* array, position_t size, ElementT val, position_t* num_up )
   contiguous_array< ElementT > arr;
   arr.data_pt = array;
   arr.offset = 0;
-  search_block_up< ElementT, contiguous_array< ElementT >, bsize >( arr, size, val, num_up, 0 );
+  search_block_up< ElementT, contiguous_array< ElementT >, bsize >( arr, size, val, num_up );
 }
 
 template < class KeyT, class ArrayT, uint bsize >
 int
-search_multi_up( ArrayT* d_subarray, uint k, KeyT* d_val_pt, position_t* d_num_up, position_t* d_sum_num_up, int skip )
+search_multi_up( ArrayT* d_subarray, uint k, KeyT* d_val_pt, position_t* d_num_up, position_t* d_sum_num_up )
 {
   gpuErrchk( cudaMemsetAsync( d_sum_num_up, 0, sizeof( position_t ) ) );
-  search_multi_up_kernel< KeyT, ArrayT, bsize > <<< k, bsize>>>( d_subarray, d_val_pt, d_num_up, d_sum_num_up, skip );
+  search_multi_up_kernel< KeyT, ArrayT, bsize > <<< k, bsize>>>( d_subarray, d_val_pt, d_num_up, d_sum_num_up );
   DBGCUDASYNC
 
   return 0;
@@ -952,10 +960,10 @@ search_multi_up( ArrayT* d_subarray, uint k, KeyT* d_val_pt, position_t* d_num_u
 
 template < class KeyT, class ArrayT, uint bsize >
 int
-search_multi_down( ArrayT* d_subarray, uint k, KeyT* d_val_pt, position_t* d_num_down, position_t* d_sum_num_down, int skip )
+search_multi_down( ArrayT* d_subarray, uint k, KeyT* d_val_pt, position_t* d_num_down, position_t* d_sum_num_down )
 {
   gpuErrchk( cudaMemsetAsync( d_sum_num_down, 0, sizeof( position_t ) ) );
-  search_multi_down_kernel< KeyT, ArrayT, bsize > <<< k, bsize>>>( d_subarray, d_val_pt, d_num_down, d_sum_num_down, skip );
+  search_multi_down_kernel< KeyT, ArrayT, bsize > <<< k, bsize>>>( d_subarray, d_val_pt, d_num_down, d_sum_num_down );
 
   DBGCUDASYNC
 
@@ -1008,7 +1016,7 @@ atomicKeyArgMin( KeyT* array, int* arg_min_pt, int index )
 
 template < class KeyT, class ArrayT, uint bsize >
 __global__ void
-threshold_range_kernel( ArrayT* subarray, position_t tot_part_size, uint k, KeyT* t_u, KeyT* t_d, int skip )
+threshold_range_kernel( ArrayT* subarray, position_t tot_part_size, uint k, KeyT* t_u, KeyT* t_d )
 {
   __shared__ KeyT shared_t_u[ bsize ];
   __shared__ KeyT shared_t_d[ bsize ];
@@ -1026,9 +1034,6 @@ threshold_range_kernel( ArrayT* subarray, position_t tot_part_size, uint k, KeyT
   bool print_vrb = ( threadIdx.x == 0 );
 #endif
   int i = threadIdx.x;
-  if (i > 0) {
-    skip = 0;
-  }
 
   position_t sub_size;
   if ( i < k )
@@ -1057,7 +1062,7 @@ threshold_range_kernel( ArrayT* subarray, position_t tot_part_size, uint k, KeyT
       position_t m1_u = min( m0_u, sub_size );
       position_t m1_d = min( m0_d, sub_size );
       m1_u = max( m1_u - 1, ( position_t ) 0 );
-      m1_d = max( m1_d - 1, ( position_t ) skip );
+      m1_d = max( m1_d - 1, ( position_t ) 0 );
 #ifdef PRINT_VRB
       printf( "i: %d\tm1_u: %ld\tm1_d: %ld\tsubarray_size: %ld\n", i, m1_u, m1_d, sub_size );
 #endif
@@ -1171,10 +1176,10 @@ extract_partitions_kernel( ArrayT* subarray,
 
 template < class ElementT, class TargetArray, class SourceArray >
 void __global__
-CopyArray( TargetArray target_arr, SourceArray source_arr )
+CopyArray( TargetArray target_arr, SourceArray source_arr, int64_t arr_size )
 {
   position_t i = blockIdx.x * blockDim.x + threadIdx.x;
-  if ( i >= source_arr.size )
+  if ( i >= arr_size )
   {
     return;
   }

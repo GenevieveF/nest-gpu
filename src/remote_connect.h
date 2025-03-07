@@ -1976,15 +1976,22 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
   // Allocating auxiliary GPU memory
   int64_t sort_storage_bytes = 0;
   void* d_sort_storage = NULL;
+  
+  ///////////TEMPORARY//////////////////////////////////////
+  CUDASYNC;
+  printf("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n");
+  printf("ib0: %d\ti_conn0; %ld\n", ib0, i_conn0);
+
+  
   copass_sort::sort< ConnKeyT, ConnStructT >
-    (&conn_key_vect_[ib0], &conn_struct_vect_[ib0], n_new_conn_tot + i_conn0,
+    (&conn_key_vect_[ib0], &conn_struct_vect_[ib0], n_new_conn_tot,
      conn_block_size_, d_sort_storage, sort_storage_bytes, i_conn0 );
-  // printf( "storage bytes: %ld\n", sort_storage_bytes );
+  printf( "storage bytes: %ld\n", sort_storage_bytes );
   CUDAMALLOCCTRL( "&d_sort_storage", &d_sort_storage, sort_storage_bytes );
 
   // printf( "Sorting...\n" );
   copass_sort::sort< ConnKeyT, ConnStructT >
-    (&conn_key_vect_[ib0], &conn_struct_vect_[ib0], n_new_conn_tot + i_conn0,
+    (&conn_key_vect_[ib0], &conn_struct_vect_[ib0], n_new_conn_tot,
      conn_block_size_, d_sort_storage, sort_storage_bytes, i_conn0 );
   CUDAFREECTRL( "d_sort_storage", d_sort_storage );
 
@@ -2074,7 +2081,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
     if (h_position < 0) {
       throw ngpu_exception( "Search error in partitioning new connections in _ConnectDistrubutedFixedIndegree" );
     }
-    if (ib == new_n_block) {
+    if (ib == new_n_block) { xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
       ib1 = ib;
       h_position = 0;
     }
