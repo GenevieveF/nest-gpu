@@ -217,48 +217,6 @@ NESTGPU::NESTGPU()
 
   first_simulation_flag_ = true;
 
-  ////////// TEMPORARY, FOR TESTING
-  //conn_->conn_block_size_ = 3;
-  ConnectMpiInit(NULL, NULL);
-  
-  int source_host_arr[] = {0, 1, 2};
-  int n_source_host = 3;
-  int target_host_arr[] = {1};
-  int n_target_host = 1;
-  int i_host_group = CreateHostGroup(source_host_arr, n_source_host);
-  
-  RemoteNodeSeq n2 = NESTGPU::RemoteCreate(2, "iaf_psc_exp", 14);
-  RemoteNodeSeq n1 = NESTGPU::RemoteCreate(1, "iaf_psc_exp", 15);
-  RemoteNodeSeq n0 = NESTGPU::RemoteCreate(0, "iaf_psc_exp", 16);
-
-  inode_t n_source_arr[] = {6, 3, 5};
-  inode_t **source_arr;
-  inode_t *source_arr_pt[3];
-  source_arr = source_arr_pt;
-  inode_t source_arr0[] = {3, 1, 4, 5, 9, 2};
-  inode_t source_arr1[] = {6, 0, 8};
-  inode_t source_arr2[] = {7, 10, 11, 12, 13};
-  source_arr_pt[0] = source_arr0;
-  source_arr_pt[1] = source_arr1;
-  source_arr_pt[2] = source_arr2;
-  
-  inode_t n_target_arr[] = {3};
-  inode_t **target_arr;
-  inode_t *target_arr_pt[1];
-  target_arr = target_arr_pt;
-  inode_t target_arr0[] = {3, 2, 0};
-  target_arr_pt[0] = target_arr0;
-  int indegree = 4;
-  
-  SynSpec syn_spec(0, 1.0, 0.1);
-  ConnSpec conn_spec(ONE_TO_ONE);
-  //Connect(1, 5, 7, 5, conn_spec, syn_spec);
-  Connect(1, 5, 7, 5, conn_spec, syn_spec);
-  ConnectDistributedFixedIndegree
-    (source_host_arr, n_source_host, source_arr, n_source_arr, target_host_arr, n_target_host, target_arr, n_target_arr, indegree, i_host_group, syn_spec);
-  
-  MpiFinalize();
-  //////////END TEMPORARY //////////////////////////////////////////////////////
 }
 
 NESTGPU::~NESTGPU()

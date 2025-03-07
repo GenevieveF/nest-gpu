@@ -356,49 +356,14 @@ copass_sort::sort_template( KeyArrayT key_array,
   d_aux_array_key_pt_ = getKeyPt( d_aux_array );
   d_aux_array_value_pt_ = getValuePt( d_aux_array );
 
-  //////////////////// serve???????!!!!!!!!!!
-  position_t tot_part_size = block_size;
+  position_t tot_part_size;
 
   ArrayT target_array[ k - 1 ];
   for ( uint i = 0; i < k - 1; i++ )
   {
     target_array[ i ] = h_subarray[ i ];
-    //for ( uint j = i + 1; j < k; j++ )
-    //{
-    //  target_array[ i ].size += h_subarray[ j ].size;
-    //}
   }
 
-  ////////////////// TEMPORARY //////////////////////
-  if (d_storage != NULL) {
-    printf("**********************************************************************\n");
-    printf("In sort_template\n");
-    uint* my_h_data_pt[k];
-    uint** my_d_data_pt = (uint**)key_array.data_pt;
-    int64_t my_bs = key_array.block_size;
-    int64_t my_offset = key_array.offset;
-    int64_t my_size = key_array.size;
-    printf("k: %d\tmy_size: %ld\tmy_bs: %ld\tmy_offset: %ld\n", k, my_size, my_bs, my_offset);
-
-    gpuErrchk( cudaMemcpy( my_h_data_pt, my_d_data_pt, k * sizeof( uint* ), cudaMemcpyDeviceToHost ) );
-    for (uint i=0; i<k; i++) {
-      uint my_h_key[my_bs];
-      gpuErrchk( cudaMemcpy( my_h_key, my_h_data_pt[i], my_bs * sizeof( uint ), cudaMemcpyDeviceToHost ) );
-      printf("\ti: %d", i);
-      for (uint j=0; j<my_bs; j++) {
-	printf("\tmy_h_key[%d]: %d", j, my_h_key[j]);
-      }
-      printf("\n");
-    }
-    for (uint i=0; i<k; i++) {
-      int64_t my_hs_size = h_subarray[i].size;
-      int64_t my_hs_offset = h_subarray[i].offset;
-      printf("\ti: %d\tmy_hs_size: %ld\tmy_hs_offset: %ld\n", i, my_hs_size, my_hs_offset); 
-    }
-  }
-  ///////////////////////////////////////////////////
-
-  
   //////////////////////////////////////////////////////////
   // LOOP SHOULD START HERE
   //////////////////////////////////////////////////////////
@@ -580,89 +545,13 @@ copass_sort::sort_template( KeyArrayT key_array,
       }
     }
 
-    //////////////////// TEMPORARY, FOR CHECK
-    gpuErrchk( cudaMemcpy( h_part_size, d_part_size_, k * sizeof( position_t ), cudaMemcpyDeviceToHost ) );
-    for (uint i=0; i<k; i++) {
-      printf("\th_part_size[%d]: %ld\t(before)\n", i, h_part_size[i]);
-    }
-
-    //////////////////////////////////////////////////////////////////////
-    
     extract_partitions< ElementT, ArrayT >( d_subarray, k, k_next_pow_2, d_part_size, d_part_size_cumul, d_aux_array );
 
-    //////////////////// TEMPORARY, FOR CHECK
-    gpuErrchk( cudaMemcpy( h_part_size, d_part_size_, k * sizeof( position_t ), cudaMemcpyDeviceToHost ) );
-    for (uint i=0; i<k; i++) {
-      printf("\th_part_size[%d]: %ld\t(after)\n", i, h_part_size[i]);
-    }
-
-    //////////////////////////////////////////////////////////////////////
-
-    
     //////////////////////////////////////////////////////////////////////
     //// USE THE INDEX OF THE ITERATION ON the k -1 target arrays
     gpuErrchk( cudaMemcpy( h_part_size, d_part_size_, k * sizeof( position_t ), cudaMemcpyDeviceToHost ) );
 
-
-  ////////////////// TEMPORARY //////////////////////
-  if (d_storage != NULL) {
-    printf("**********************************************************************\n");
-    printf("In sort_template before repack\n");
-    uint* my_h_data_pt[k];
-    uint** my_d_data_pt = (uint**)key_array.data_pt;
-    int64_t my_bs = key_array.block_size;
-    int64_t my_offset = key_array.offset;
-    int64_t my_size = key_array.size;
-    printf("k: %d\tmy_size: %ld\tmy_bs: %ld\tmy_offset: %ld\n", k, my_size, my_bs, my_offset);
-
-    gpuErrchk( cudaMemcpy( my_h_data_pt, my_d_data_pt, k * sizeof( uint* ), cudaMemcpyDeviceToHost ) );
-    for (uint i=0; i<k; i++) {
-      uint my_h_key[my_bs];
-      gpuErrchk( cudaMemcpy( my_h_key, my_h_data_pt[i], my_bs * sizeof( uint ), cudaMemcpyDeviceToHost ) );
-      printf("\ti: %d", i);
-      for (uint j=0; j<my_bs; j++) {
-	printf("\tmy_h_key[%d]: %d", j, my_h_key[j]);
-      }
-      printf("\n");
-    }
-    for (uint i=0; i<k; i++) {
-      int64_t my_hs_size = h_subarray[i].size;
-      int64_t my_hs_offset = h_subarray[i].offset;
-      printf("\ti: %d\tmy_hs_size: %ld\tmy_hs_offset: %ld\n", i, my_hs_size, my_hs_offset); 
-    }
-  }
-  ///////////////////////////////////////////////////
-    
     repack( h_subarray, k, h_part_size, d_buffer, buffer_size );
-
-  ////////////////// TEMPORARY //////////////////////
-  if (d_storage != NULL) {
-    printf("**********************************************************************\n");
-    printf("In sort_template after repack\n");
-    uint* my_h_data_pt[k];
-    uint** my_d_data_pt = (uint**)key_array.data_pt;
-    int64_t my_bs = key_array.block_size;
-    int64_t my_offset = key_array.offset;
-    int64_t my_size = key_array.size;
-    printf("k: %d\tmy_size: %ld\tmy_bs: %ld\tmy_offset: %ld\n", k, my_size, my_bs, my_offset);
-
-    gpuErrchk( cudaMemcpy( my_h_data_pt, my_d_data_pt, k * sizeof( uint* ), cudaMemcpyDeviceToHost ) );
-    for (uint i=0; i<k; i++) {
-      uint my_h_key[my_bs];
-      gpuErrchk( cudaMemcpy( my_h_key, my_h_data_pt[i], my_bs * sizeof( uint ), cudaMemcpyDeviceToHost ) );
-      printf("\ti: %d", i);
-      for (uint j=0; j<my_bs; j++) {
-	printf("\tmy_h_key[%d]: %d", j, my_h_key[j]);
-      }
-      printf("\n");
-    }
-    for (uint i=0; i<k; i++) {
-      int64_t my_hs_size = h_subarray[i].size;
-      int64_t my_hs_offset = h_subarray[i].offset;
-      printf("\ti: %d\tmy_hs_size: %ld\tmy_hs_offset: %ld\n", i, my_hs_size, my_hs_offset); 
-    }
-  }
-  ///////////////////////////////////////////////////
 
     gpuErrchk( cudaMemcpyAsync( d_subarray, h_subarray, k * sizeof( ArrayT ), cudaMemcpyHostToDevice ) );
     if ( compare_with_serial && i_sub == last_i_sub )
@@ -672,36 +561,6 @@ copass_sort::sort_template( KeyArrayT key_array,
 
     CopyArray< ElementT, ArrayT, AuxArrayT > <<< ( tot_part_size + 1023 ) / 1024, 1024 >>>
       (target_array[ i_sub ], d_aux_array, tot_part_size );
-
-  ////////////////// TEMPORARY //////////////////////
-  if (d_storage != NULL) {
-    printf("**********************************************************************\n");
-    printf("In sort_template just before end of loop\n");
-    uint* my_h_data_pt[k];
-    uint** my_d_data_pt = (uint**)key_array.data_pt;
-    int64_t my_bs = key_array.block_size;
-    int64_t my_offset = key_array.offset;
-    int64_t my_size = key_array.size;
-    printf("k: %d\tmy_size: %ld\tmy_bs: %ld\tmy_offset: %ld\n", k, my_size, my_bs, my_offset);
-
-    gpuErrchk( cudaMemcpy( my_h_data_pt, my_d_data_pt, k * sizeof( uint* ), cudaMemcpyDeviceToHost ) );
-    for (uint i=0; i<k; i++) {
-      uint my_h_key[my_bs];
-      gpuErrchk( cudaMemcpy( my_h_key, my_h_data_pt[i], my_bs * sizeof( uint ), cudaMemcpyDeviceToHost ) );
-      printf("\ti: %d", i);
-      for (uint j=0; j<my_bs; j++) {
-	printf("\tmy_h_key[%d]: %d", j, my_h_key[j]);
-      }
-      printf("\n");
-    }
-    for (uint i=0; i<k; i++) {
-      int64_t my_hs_size = h_subarray[i].size;
-      int64_t my_hs_offset = h_subarray[i].offset;
-      printf("\ti: %d\tmy_hs_size: %ld\tmy_hs_offset: %ld\n", i, my_hs_size, my_hs_offset); 
-    }
-  }
-  ///////////////////////////////////////////////////
-
 
     
   }
@@ -962,36 +821,7 @@ copass_sort::sort( KeyT** key_subarray, ValueT** value_subarray, position_t n,
   for ( uint i = 0; i < k; i++ )
   {
     contiguous_key_value< KeyT, ValueT > key_value_block = getBlock( h_key_value, i );
-    //// TEMPORARY ////////////////////////////////////
-    int64_t my_size = key_value_block.size;
-    int64_t my_offset = key_value_block.offset;
-    uint my_h_key_pt[my_size];
-    uint *my_d_key_pt;
-
-    if (d_storage != NULL) {
-      printf("i: %d\tmy_size: %ld\tmy_offset: %ld\n", i, my_size, my_offset);
-    
-      //gpuErrchk(cudaMalloc(&my_d_key_pt, my_size*sizeof(uint)));
-      my_d_key_pt = (uint*)key_value_block.key_pt + my_offset;
-      gpuErrchk(cudaMemcpy(my_h_key_pt, my_d_key_pt, my_size*sizeof(uint), cudaMemcpyDeviceToHost));
-      printf("\tbefore >>>");
-      for (int j=0; j<my_size; j++) {
-	printf("\t%d", my_h_key_pt[j]);
-      }
-      printf("\n");
-    }
-    ////////////////////////////////////////////////////////    
     array_GPUSort( key_value_block, d_storage, ext_st_bytes );
-    //// TEMPORARY ////////////////////////////////////
-    if (d_storage != NULL) {
-      gpuErrchk(cudaMemcpy(my_h_key_pt, my_d_key_pt, my_size*sizeof(uint), cudaMemcpyDeviceToHost));
-      printf("\tafter >>>");
-      for (int j=0; j<my_size; j++) {
-	printf("\t%d", my_h_key_pt[j]);
-      }
-      printf("\n");
-    }
-    ////////////////////////////////////////////////////////    
 
     if ( d_storage == NULL && i > 0 )
     {

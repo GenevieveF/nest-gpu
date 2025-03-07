@@ -343,7 +343,7 @@ template < class ConnKeyT, class ConnStructT >
 int
 ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectionMapInit()
 {
-  node_map_block_size_ = 10; //10000; // initialize node map block size
+  node_map_block_size_ = 10000; // initialize node map block size
 
   cudaMemcpyToSymbol( node_map_block_size, &node_map_block_size_, sizeof( uint ) );
 
@@ -1083,8 +1083,6 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectSource( int source_hos
   // on both the source and target hosts create a temporary array
   // of booleans having size equal to the number of source nodes
 
-
-  printf("In RCS0 n_source: %d\n", n_source);
   uint* d_source_node_flag; // [n_source] // each element is initially false
   CUDAMALLOCCTRL( "&d_source_node_flag", &d_source_node_flag, n_source * sizeof( uint ) );
   gpuErrchk( cudaMemset( d_source_node_flag, 0, n_source * sizeof( uint ) ) );
@@ -1096,7 +1094,6 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectSource( int source_hos
   CUDAMALLOCCTRL( "&d_local_node_index", &d_local_node_index, n_source * sizeof( uint ) );
 
   int64_t old_n_conn = n_conn_;
-  printf("In RCS1 old_n_conn: %ld\n", old_n_conn);
   // The connect command is performed on both source and target host using
   // the same initial seed and using as source node indexes the integers
   // from 0 to n_source_nodes - 1
@@ -1106,7 +1103,6 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectSource( int source_hos
   {
     return 0;
   }
-  printf("In RCS2 n_conn: %ld\n", n_conn_);
   
   // flag source nodes used in at least one new connection
   // Loop on all new connections and set source_node_flag[i_source]=true
@@ -1126,7 +1122,6 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectSource( int source_hos
   // copy result from GPU to CPU memory
   uint n_used_source_nodes;
   gpuErrchk( cudaMemcpy( &n_used_source_nodes, d_n_used_source_nodes, sizeof( uint ), cudaMemcpyDeviceToHost ) );
-  printf("In RCS3 n_used_source_nodes: %d\n", n_used_source_nodes);
   
   // Define and allocate arrays of size n_used_source_nodes
   uint* d_unsorted_source_node_index; // [n_used_source_nodes];
@@ -1160,24 +1155,6 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectSource( int source_hos
   gpuErrchk( cudaPeekAtLastError() );
   gpuErrchk( cudaDeviceSynchronize() );
 
-
-  ////////// TEMPORARY, FOR TESTING
-  uint h_unsorted_source_node_index[n_used_source_nodes];
-  gpuErrchk( cudaMemcpy( h_unsorted_source_node_index, d_unsorted_source_node_index, n_used_source_nodes*sizeof( uint ),
-			 cudaMemcpyDeviceToHost ) );
-  uint h_i_unsorted_source_arr[n_used_source_nodes];
-  gpuErrchk( cudaMemcpy( h_i_unsorted_source_arr, d_i_unsorted_source_arr, n_used_source_nodes*sizeof( uint ),
-			 cudaMemcpyDeviceToHost ) );
-  for (uint i=0; i<n_used_source_nodes; i++) {
-    printf("h_unsorted_source_node_index[%d]: %d\n", i, h_unsorted_source_node_index[i]);
-  }
-  for (uint i=0; i<n_used_source_nodes; i++) {
-    printf("h_i_unsorted_source_arr[%d]: %d\n", i, h_i_unsorted_source_arr[i]);
-  }
-
-  /////////////////////////////////
-  
-
   // Sort the arrays using unsorted_source_node_index as key
   // and i_source as value -> sorted_source_node_index
 
@@ -1208,24 +1185,6 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectSource( int source_hos
     n_used_source_nodes );
   //<END-CLANG-TIDY-SKIP>//
 
-
-  ////////// TEMPORARY, FOR TESTING
-  uint h_sorted_source_node_index[n_used_source_nodes];
-  gpuErrchk( cudaMemcpy( h_sorted_source_node_index, d_sorted_source_node_index, n_used_source_nodes*sizeof( uint ),
-			 cudaMemcpyDeviceToHost ) );
-  uint h_i_sorted_source_arr[n_used_source_nodes];
-  gpuErrchk( cudaMemcpy( h_i_sorted_source_arr, d_i_sorted_source_arr, n_used_source_nodes*sizeof( uint ),
-			 cudaMemcpyDeviceToHost ) );
-  for (uint i=0; i<n_used_source_nodes; i++) {
-    printf("h_sorted_source_node_index[%d]: %d\n", i, h_sorted_source_node_index[i]);
-  }
-  for (uint i=0; i<n_used_source_nodes; i++) {
-    printf("h_i_sorted_source_arr[%d]: %d\n", i, h_i_sorted_source_arr[i]);
-  }
-
-  /////////////////////////////////
-
-  
   //////////////////////////////
   // Allocate array of remote source node map blocks
   // and copy their address from host to device
@@ -1789,44 +1748,6 @@ subtractSourceOffsetKernel
   setConnSource< ConnKeyT >( conn_key_subarray[ i_conn ], index );
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// Print connections in a block
-template < class ConnKeyT, class ConnStructT >
-__global__ void
-printConnections
-( ConnKeyT* conn_key_subarray, ConnStructT* conn_struct_subarray, int64_t n_conn)
-{
-  int64_t i_conn = threadIdx.x + blockIdx.x * blockDim.x;
-  if ( i_conn >= n_conn ) {
-    return;
-  }
-  inode_t source = getConnSource< ConnKeyT >( conn_key_subarray[ i_conn ] );
-  inode_t target = getConnTarget< ConnStructT >( conn_struct_subarray[ i_conn ] );
-
-  printf("printConnections i_conn: %lld, i_source: %d, i_target: %d\n", i_conn, source, target);
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// Print connections in a block all info
-template < class ConnKeyT, class ConnStructT >
-__global__ void
-printConnectionsFull
-( ConnKeyT* conn_key_subarray, ConnStructT* conn_struct_subarray, int64_t n_conn)
-{
-  int64_t i_conn = threadIdx.x + blockIdx.x * blockDim.x;
-  if ( i_conn >= n_conn ) {
-    return;
-  }
-  inode_t source = getConnSource< ConnKeyT >( conn_key_subarray[ i_conn ] );
-  inode_t target = getConnTarget< ConnStructT >( conn_struct_subarray[ i_conn ] );
-  uint i_delay = getConnDelay< ConnKeyT >( conn_key_subarray[ i_conn ] );
-  int i_port = getConnPort< ConnKeyT, ConnStructT >( conn_key_subarray[ i_conn ], conn_struct_subarray[ i_conn ] );
-  int i_syn = getConnSyn< ConnKeyT, ConnStructT >( conn_key_subarray[ i_conn ], conn_struct_subarray[ i_conn ] );
-  float weight = conn_struct_subarray[ i_conn ].weight;
-
-  printf("printConnections i_conn: %lld, i_source: %d, i_target: %d, i_port: %d, i_delay: %d, i_syn: %d, w: %f\n",
-	 i_conn, source, target, i_port, i_delay, i_syn, weight);
-}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Print connections in a block for distributed rule with source host+node combined index
@@ -1858,12 +1779,6 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
  int *target_host_arr, int n_target_host, T2 *h_target_arr, inode_t *n_target_arr,
  int indegree, int i_host_group, SynSpec &syn_spec)
 {
-  //////////////////// TEMPORARY FOR DEBUGGING
-  uint my_arr[] = { 3, 10, 4, 12, 6, 1, 7, 2, 3, 9, 13, 9 };
-  uint my_i = 0;
-  ////////////////////////////////////////////
-
-  
   // check that connection key part has the right size in bytes
   if (sizeof(ConnKeyT) != 4 &&  sizeof(ConnKeyT) != 8) {
         throw ngpu_exception( "sizeof(ConnKeyT) must be either 4 or 8 bytes"
@@ -1943,11 +1858,10 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
 
   // compute number of new connections that must be created
   int64_t n_new_conn_tot = n_target*indegree;
-  printf("this_host: %d\tn_new_conn_tot: %ld\tconn_block_size_: %ld\tindegree: %d\n", this_host_, n_new_conn_tot, conn_block_size_, indegree);
+  //printf("this_host: %d\tn_new_conn_tot: %ld\tconn_block_size_: %ld\tindegree: %d\n", this_host_, n_new_conn_tot, conn_block_size_, indegree);
 
   // Create new connection blocks as needed
   int new_n_block = ( int ) ( ( n_conn_ + n_new_conn_tot + conn_block_size_ - 1 ) / conn_block_size_ );
-  printf("new_n_block: %d\n", new_n_block);
   allocateNewBlocks( new_n_block );
 
   // Cumulative sum of n_source: n_source_cumul
@@ -1955,12 +1869,11 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
   n_source_cumul[0] = 0;
   for (int ish=0; ish<n_source_host; ish++) {
     n_source_cumul[ish+1] = n_source_cumul[ish] + n_source_arr[ish];
-    printf("ish: %d\tn_source_cumul[ish+1]: %ld\n", ish, n_source_cumul[ish+1]); 
   }
   
   // total number of source nodes:
   unsigned long long n_source_tot = n_source_cumul[n_source_host];
-  printf("n_source_tot: %lld\n", n_source_tot);
+  // printf("n_source_tot: %lld\n", n_source_tot);
   
   if (n_source_tot > (ConnKeyT)(-1)) { // for an unsigned integer type, -1 is the max value it can represent
     throw ngpu_exception( "Total number of source neuron too large for the connection key type"
@@ -1997,7 +1910,6 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
       i_conn0 = 0;
       n_block_conn = conn_block_size_;
     }
-    printf("ib: %d\ti_conn0: %ld\tn_block_conn: %ld\n", ib, i_conn0, n_block_conn);
     // Connection source host&node indexes are extracted as 32 bit or 64 bit random integers
     // and then replaced with their modulo in the range from 0 to n_source_tot - 1 .
     // Each target node index is repeated indegree times in the connections.
@@ -2016,12 +1928,6 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
       curandGenerate(conn_random_generator_[ this_host_ ][ this_host_ ],
 		     (unsigned int*)conn_key_vect_[ ib ] + i_conn0, n_block_conn*sizeof(unsigned int));
 
-      //////////////////// TEMPORARY FOR DEBUGGING
-      gpuErrchk(cudaMemcpy((unsigned int*)conn_key_vect_[ ib ] + i_conn0, my_arr + my_i, n_block_conn*sizeof(uint),
-			   cudaMemcpyHostToDevice));
-      my_i += n_block_conn;
-      ////////////////////////////////////////////
-      
       // Replace each 32 bit random integer with its modulo in the range from 0 to n_source_tot - 1
       moduloKernel< unsigned int > <<< ( n_block_conn + 1023 ) / 1024, 1024 >>>
 	((unsigned int*)conn_key_vect_[ ib ] + i_conn0, n_block_conn, n_source_tot);
@@ -2035,10 +1941,6 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
       conn_struct_vect_[ ib ] + i_conn0, n_block_conn, n_prev_conn, d_target, indegree );
     DBGCUDASYNC;
 
-    CUDASYNC;
-    printCombinedSourceHostAndNodeConnections <<< ( n_block_conn + 1023 ) / 1024, 1024 >>>
-      ( (uint*)conn_key_vect_[ ib ] + i_conn0, conn_struct_vect_[ ib ] + i_conn0, n_block_conn);
-    CUDASYNC;
     n_prev_conn += n_block_conn;
   } // end of loop on connection blocks
 
@@ -2051,17 +1953,11 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
   // Allocating auxiliary GPU memory
   int64_t sort_storage_bytes = 0;
   void* d_sort_storage = NULL;
-  
-  ///////////TEMPORARY//////////////////////////////////////
-  CUDASYNC;
-  printf("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n");
-  printf("ib0: %d\ti_conn0; %ld\n", ib0, i_conn0);
-
-  
+    
   copass_sort::sort< ConnKeyT, ConnStructT >
     (&conn_key_vect_[ib0], &conn_struct_vect_[ib0], n_new_conn_tot,
      conn_block_size_, d_sort_storage, sort_storage_bytes, i_conn0 );
-  printf( "storage bytes: %ld\n", sort_storage_bytes );
+  //printf( "storage bytes: %ld\n", sort_storage_bytes );
   CUDAMALLOCCTRL( "&d_sort_storage", &d_sort_storage, sort_storage_bytes );
 
   // printf( "Sorting...\n" );
@@ -2084,12 +1980,11 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
   int64_t old_n_conn_ = n_conn_;
   int ret;
   
-  printf("//////////////////////////////////////////////////////////////////////\n");
   // Loop on source hosts (it's fine to do it with a loop, no need for parallelizing)
   for (int ish=0; ish<n_source_host; ish++) {
     // Locate (search) the current element of the n_source_cumul array in the conn_key_vect_ block
     int64_t value = n_source_cumul[ish+1];
-    printf("ish: %d\tvalue: %ld\n", ish, value);
+    //printf("ish: %d\tvalue: %ld\n", ish, value);
     
     int64_t n_block_conn; // number of new connections in the current block of the loop
     int64_t i_conn0;      // index of first new connection in this block
@@ -2118,14 +2013,6 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
 	n_block_conn = conn_block_size_;
       }
 
-      printf("######################################################################\n");
-      printf("ib: %d\ti_conn0: %ld\tn_block_conn: %ld\n", ib, i_conn0, n_block_conn);
-      CUDASYNC;
-      printCombinedSourceHostAndNodeConnections <<< ( n_block_conn + 1023 ) / 1024, 1024 >>>
-	( (uint*)conn_key_vect_[ ib ] + i_conn0, conn_struct_vect_[ ib ] + i_conn0, n_block_conn);
-      CUDASYNC;
-      printf("######################################################################\n");
-      
       // allocate a 64 bit integer to store the search result
       int64_t *d_position;
       CUDAMALLOCCTRL( "&d_position", &d_position, sizeof(int64_t) );
@@ -2151,7 +2038,6 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
       // check if found
       if (h_position < n_block_conn) {
 	ib1 = ib; // next partition search should start from current block, where current partition ends
-	printf("ib1: %d\th_position: %ld\ti_conn0: %ld\n", ib1, h_position, i_conn0);
 	h_position += i_conn0;
 	break;
       }
@@ -2171,7 +2057,6 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
     }
     // compute number of connections in current partition
     n_new_conn = part_conn1 - part_conn0;
-    printf("part_conn1: %ld\tn_new_conn %ld\n", part_conn1, n_new_conn); 
 
     // Now we must subtract n_source_cumul[ish] and convert the source node indexes to the ConnKeyT representation
     // in all connections of all blocks of the current partition
@@ -2213,13 +2098,6 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
 	  (conn_key_vect_[ ib ] + i_conn0, n_block_conn, n_source_cumul[ish]); 
 	DBGCUDASYNC;
 
-	printf("//////////////////////////////////////////////////////////////////////\n");
-	printf("ish: %d\tblock: %d\n", ish, ib);
-	CUDASYNC;
-	printConnectionsFull< ConnKeyT, ConnStructT > <<< ( n_block_conn + 1023 ) / 1024, 1024 >>>
-	  (conn_key_vect_[ ib ] + i_conn0, conn_struct_vect_[ ib ] + i_conn0, n_block_conn);
-	CUDASYNC;
-	printf("//////////////////////////////////////////////////////////////////////\n");
       }
     }
 
@@ -2228,17 +2106,13 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
     // filled only with source node relative indexes and target node
     // indexes and fills them with weights, delays, syn_geoups, ports
     ConnSpec conn_spec(ASSIGNED_NODES, n_new_conn);
-    ret = remoteConnectSource< T1, T2 >( source_host_arr[ish], d_source_arr[ish], n_source_arr[ish], d_target, n_target,
-    					     group_local_id, conn_spec, syn_spec );
+    ret = remoteConnectSource< T1, T2 >( source_host_arr[ish], d_source_arr[ish], n_source_arr[ish],
+					 d_target, n_target, group_local_id, conn_spec, syn_spec );
 
-
-    
     if (ib == new_n_block || ret != 0) { // last block passed, exit loop
       break;
     }
     part_conn0 = part_conn1; // update index of the first connection of the next partition
-
-
   }
 
   freeNodeArrayFromDevice(d_target);
@@ -2249,6 +2123,6 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
   return ret;
 }
 
-    
+
 
 #endif // REMOTECONNECTH
