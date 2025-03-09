@@ -2563,7 +2563,6 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::setConnectionWeights( curandGenerat
   int64_t n_conn,
   SynSpec& syn_spec )
 {
-  printf("ok20 n_conn: %ld\n", n_conn); 
   if ( syn_spec.weight_distr_ >= DISTR_TYPE_ARRAY // probability distribution
     && syn_spec.weight_distr_ < N_DISTR_TYPE )
   { // or array
@@ -2599,8 +2598,6 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::setConnectionWeights( curandGenerat
   }
   else
   {
-    printf("ok21 n_conn: %ld\n", n_conn);
-    fflush(stdout);
     setWeights< ConnStructT > <<< ( n_conn + 1023 ) / 1024, 1024 >>>( conn_struct_subarray, syn_spec.weight_, n_conn );
     DBGCUDASYNC;
   }
@@ -3006,7 +3003,6 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_Connect( curandGenerator_t& gen,
       gen, source, n_source, target, n_target, conn_spec.outdegree_, syn_spec, remote_source_flag );
     break;
   case ASSIGNED_NODES:
-    printf("ok10 conn_spec.total_num_: %d\n", conn_spec.total_num_); 
     return connectAssignedNodes< T1, T2 >(
       gen, source, n_source, target, n_target, conn_spec.total_num_, syn_spec, remote_source_flag );
     break;
@@ -3340,7 +3336,6 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::connectAssignedNodes( curandGenerat
   }
   int64_t old_n_conn = n_conn_;
   int64_t n_new_conn = total_num;
-  printf("ok12: n_new_conn: %ld\ttotal_num: %ld\n", n_new_conn, total_num);
   n_conn_ += n_new_conn; // new number of connections
   int new_n_block = ( int ) ( ( n_conn_ + conn_block_size_ - 1 ) / conn_block_size_ );
 
@@ -3362,13 +3357,11 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::connectAssignedNodes( curandGenerat
     { // all connections are in the same block
       i_conn0 = old_n_conn % conn_block_size_;
       n_block_conn = n_new_conn;
-      printf("ok13 n_block_conn: %ld\n", n_block_conn);
     }
     else if ( ib == ib0 )
     { // first block
       i_conn0 = old_n_conn % conn_block_size_;
       n_block_conn = conn_block_size_ - i_conn0;
-      printf("ok14 n_block_conn: %ld\n", n_block_conn);
     }
     else if ( ib == new_n_block - 1 )
     { // last block
@@ -3381,7 +3374,6 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::connectAssignedNodes( curandGenerat
       n_block_conn = conn_block_size_;
     }
 
-    printf("ok15 n_block_conn: %ld\n", n_block_conn);
     setConnectionWeights(
       local_rnd_gen_, d_conn_storage_, conn_struct_vect_[ ib ] + i_conn0, n_block_conn, syn_spec );
 

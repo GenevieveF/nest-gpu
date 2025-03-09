@@ -3213,7 +3213,8 @@ def ConnectDistributedFixedIndegree(source_host_list, source_group_list, target_
                 raise ValueError("Inconsistent target group types")
     else:
         raise ValueError("Unknown target node type")
-        
+
+    gc.disable() # temporarily disable garbage collection
     SynSpecInit()
         
     #array_size = RuleArraySize(conn_dict, source, target)    # not used for now
@@ -3308,5 +3309,7 @@ def ConnectDistributedFixedIndegree(source_host_list, source_group_list, target_
 
     if GetErrorCode() != 0:
         raise ValueError(GetErrorMessage())
+    
+    gc.enable()
     return ret
 

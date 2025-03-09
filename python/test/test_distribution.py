@@ -10,7 +10,7 @@ ngpu.SetStatus(neuron, {"V_m": {"distribution":"normal_clipped",
 l = ngpu.GetStatus(neuron, "V_m")
 d=[]
 for elem in l:
-    d.append(elem[0])
+    d.append(elem)
     
 print (len(d))
 import matplotlib.pyplot as plt
