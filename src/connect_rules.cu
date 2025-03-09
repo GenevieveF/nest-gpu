@@ -47,6 +47,8 @@ ConnSpec::ConnSpec()
 int
 ConnSpec::Init( int rule, int degree /*=0*/ )
 {
+  printf("ok0 in ConnSpec rule: %d degree: %d AN: %d\n", rule, degree,
+	 ASSIGNED_NODES);
   Init();
   if ( rule < 0 || rule > N_CONN_RULE )
   {
@@ -60,6 +62,7 @@ ConnSpec::Init( int rule, int degree /*=0*/ )
   if ( rule == FIXED_TOTAL_NUMBER || rule == ASSIGNED_NODES )
   {
     total_num_ = degree;
+    printf("ok1 in ConnSpec degree: %d total_num: %d\n", degree, total_num_);
   }
   else if ( rule == FIXED_INDEGREE )
   {

@@ -1797,6 +1797,35 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
     return 0;
   }
 
+  /////////////////////////////// TEMPORARY, FOR TESTING
+  if (this_host_ == 0) {
+    for (int ish=0; ish<n_source_host; ish++) {
+      // find the position i_host of the source host in the host group
+      int source_host = source_host_arr[ish];
+      printf("source_host: %d", source_host);
+      for (inode_t i=0; i<n_source_arr[ish]; i++) {
+	inode_t i_source = hGetNodeIndex(h_source_arr[ish], i);
+	printf("\t%d", i_source);
+      }
+      printf("\n");
+    }
+    for (int ith=0; ith<n_target_host; ith++) {
+      // find the position i_host of the target host in the host group
+      int target_host = target_host_arr[ith];
+      printf("target_host: %d", target_host);
+      for (inode_t i=0; i<n_target_arr[ith]; i++) {
+	inode_t i_target = hGetNodeIndex(h_target_arr[ith], i);
+	printf("\t%d", i_target);
+      }
+      printf("\n");
+    }
+  }
+
+  //////////////////////////////////////////////////////////////////////
+
+
+
+  
   // Connections must be created only for target_host == this_host
   // so first of all check if this_host is in target_host_arr, and in this case
   // find the index in the array and check that it is not present more than once
@@ -1981,7 +2010,9 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
   int ret;
   
   // Loop on source hosts (it's fine to do it with a loop, no need for parallelizing)
+  printf("ok00 %d, n_conn_: %ld, part_conn0: %ld, ib1: %d\n", this_host_, n_conn_, part_conn0, ib1);
   for (int ish=0; ish<n_source_host; ish++) {
+    printf("ok01 %d, ish: %d, part_conn0: %ld, ib1: %d\n", this_host_, ish, part_conn0, ib1);
     // Locate (search) the current element of the n_source_cumul array in the conn_key_vect_ block
     int64_t value = n_source_cumul[ish+1];
     //printf("ish: %d\tvalue: %ld\n", ish, value);
@@ -1996,6 +2027,8 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
       { // all connections are in the same block
 	i_conn0 = part_conn0 % conn_block_size_;
 	n_block_conn = ( old_n_conn_ + n_new_conn_tot - 1 ) % conn_block_size_ + 1 - i_conn0;
+	printf("ok02 %d, ish: %d, ib: %d, i_conn0: %ld, n_block_conn: %ld\n",
+	       this_host_, ish, ib, i_conn0, n_block_conn);
       }
       else if ( ib == ib1 ) // first block of the loop, cannot be the last (see above)
       { // first block
@@ -2049,15 +2082,19 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
     int64_t n_new_conn;
     if (ib == new_n_block) { // last block passed
       // compute index of the last connection of the current partition + 1
-      part_conn1 = (new_n_block - 1) * conn_block_size_ + n_block_conn;
+      part_conn1 = (new_n_block - 1) * conn_block_size_ + i_conn0 + n_block_conn;
+      printf("ok07 %d, part_conn1: %ld, new_n_block: %d, n_block_conn: %ld\n",
+	     this_host_, part_conn1, new_n_block, n_block_conn);
     }
     else { // not over the last block
       // compute index of the last connection of the current partition + 1
       part_conn1 = ib1 * conn_block_size_ + h_position;
+      printf("ok08 %d, part_conn1: %ld\n", this_host_, part_conn1);
     }
     // compute number of connections in current partition
     n_new_conn = part_conn1 - part_conn0;
-
+    printf("ok09 %d, n_new_conn: %ld, part_conn1: %ld, part_conn0: %ld\n",
+	   this_host_, n_new_conn, part_conn1, part_conn0);
     // Now we must subtract n_source_cumul[ish] and convert the source node indexes to the ConnKeyT representation
     // in all connections of all blocks of the current partition
     // To do this, we need to loop on all blocks of the current partition
@@ -2100,7 +2137,8 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
 
       }
     }
-
+    // To run the test test_connect_distributed_fixed_indegree.sh uncomment the following line:
+    printf("TDFID %d, n_new_conn: %ld\n", this_host_, n_new_conn); 
     // do a regular RemoteConnectSource with source host n. ish
     // using a new connection rule that uses already created connections
     // filled only with source node relative indexes and target node

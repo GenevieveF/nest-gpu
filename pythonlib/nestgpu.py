@@ -3139,24 +3139,51 @@ def RemoteCreate(i_host, model_name, n_node=1, n_ports=1, status_dict=None):
 
 
 
+NESTGPU_ConnectDistributedFixedIndegreeSeqSeq = _nestgpu.NESTGPU_ConnectDistributedFixedIndegreeSeqSeq
+NESTGPU_ConnectDistributedFixedIndegreeSeqSeq.argtypes = (ctypes.c_void_p, ctypes.c_int,
+                                                          ctypes.c_void_p, ctypes.c_void_p,
+                                                          ctypes.c_void_p, ctypes.c_int,
+                                                          ctypes.c_void_p, ctypes.c_void_p,
+                                                          ctypes.c_int, ctypes.c_int)
+
+NESTGPU_ConnectDistributedFixedIndegreeSeqSeq.restype = ctypes.c_int
+
 NESTGPU_ConnectDistributedFixedIndegreeGroupSeq = _nestgpu.NESTGPU_ConnectDistributedFixedIndegreeGroupSeq
 NESTGPU_ConnectDistributedFixedIndegreeGroupSeq.argtypes = (ctypes.c_void_p, ctypes.c_int,
                                                             ctypes.c_void_p, ctypes.c_void_p,
                                                             ctypes.c_void_p, ctypes.c_int,
                                                             ctypes.c_void_p, ctypes.c_void_p,
-                                                            ctypes.c_int)
+                                                            ctypes.c_int, ctypes.c_int)
+
+NESTGPU_ConnectDistributedFixedIndegreeGroupSeq.restype = ctypes.c_int
+
+NESTGPU_ConnectDistributedFixedIndegreeSeqGroup = _nestgpu.NESTGPU_ConnectDistributedFixedIndegreeSeqGroup
+NESTGPU_ConnectDistributedFixedIndegreeSeqGroup.argtypes = (ctypes.c_void_p, ctypes.c_int,
+                                                            ctypes.c_void_p, ctypes.c_void_p,
+                                                            ctypes.c_void_p, ctypes.c_int,
+                                                            ctypes.c_void_p, ctypes.c_void_p,
+                                                            ctypes.c_int, ctypes.c_int)
+
+NESTGPU_ConnectDistributedFixedIndegreeSeqGroup.restype = ctypes.c_int
+
+NESTGPU_ConnectDistributedFixedIndegreeGroupGroup = _nestgpu.NESTGPU_ConnectDistributedFixedIndegreeGroupGroup
+NESTGPU_ConnectDistributedFixedIndegreeGroupGroup.argtypes = (ctypes.c_void_p, ctypes.c_int,
+                                                              ctypes.c_void_p, ctypes.c_void_p,
+                                                              ctypes.c_void_p, ctypes.c_int,
+                                                              ctypes.c_void_p, ctypes.c_void_p,
+                                                              ctypes.c_int, ctypes.c_int)
 
 NESTGPU_ConnectDistributedFixedIndegreeGroupSeq.restype = ctypes.c_int
 
 
 def ConnectDistributedFixedIndegree(source_host_list, source_group_list, target_host_list, target_group_list,
-                  conn_dict, syn_dict, host_group):
+                                    indegree, host_group, syn_dict):
     "Connect a list of source node groups to a list of target node groups on different mpi hosts with the \
     fixed-indegree rule"
-    if (type(source_host_list)!=list & type(source_host_list)!=tuple) | \
-       (type(target_host_list)!=list & type(target_host_list)!=tuple):
+    if (type(source_host_list)!=list and type(source_host_list)!=tuple) or \
+       (type(target_host_list)!=list and type(target_host_list)!=tuple):
         raise ValueError("Error in host list type")
-    if (type(source_group_list)!=list) & (type(source_group_list)!=tuple):
+    if (type(source_group_list)!=list) and (type(source_group_list)!=tuple):
         raise ValueError("Unknown source group list type")
     if len(source_host_list) != len(source_group_list):
         raise ValueError("Inconsistent size of source_host_list and source_group_list")
@@ -3164,14 +3191,14 @@ def ConnectDistributedFixedIndegree(source_host_list, source_group_list, target_
         for source_group in source_group_list:
             if (type(source_group)!=NodeSeq):
                 raise ValueError("Inconsistent source group types")
-    elif (type(source_group_list[0])==list | type(source_group_list[0])==tuple):
+    elif (type(source_group_list[0])==list or type(source_group_list[0])==tuple):
         for source_group in source_group_list:
-            if (type(source_group)!=list & type(source_group)!=tuple):
+            if (type(source_group)!=list and type(source_group)!=tuple):
                 raise ValueError("Inconsistent source group types")
     else:
         raise ValueError("Unknown source node type")
         
-    if (type(target_group_list)!=list) & (type(target_group_list)!=tuple):
+    if (type(target_group_list)!=list) and (type(target_group_list)!=tuple):
         raise ValueError("Unknown target group list type")
     if len(target_host_list) != len(target_group_list):
         raise ValueError("Inconsistent size of target_host_list and target_group_list")
@@ -3180,29 +3207,14 @@ def ConnectDistributedFixedIndegree(source_host_list, source_group_list, target_
         for target_group in target_group_list:
             if (type(target_group)!=NodeSeq):
                 raise ValueError("Inconsistent target group types")
-    elif (type(target_group_list[0])==list | type(target_group_list[0])==tuple):
+    elif (type(target_group_list[0])==list or type(target_group_list[0])==tuple):
         for target_group in target_group_list:
-            if (type(target_group)!=list & type(target_group)!=tuple):
+            if (type(target_group)!=list and type(target_group)!=tuple):
                 raise ValueError("Inconsistent target group types")
     else:
         raise ValueError("Unknown target node type")
         
-    ConnSpecInit()
     SynSpecInit()
-    for param_name in conn_dict:
-        if param_name=="rule":
-            for i_rule in range(len(conn_rule_name)):
-                if conn_dict[param_name]==conn_rule_name[i_rule]:
-                    break
-            if i_rule < len(conn_rule_name):
-                SetConnSpecParam(param_name, i_rule)
-            else:
-                raise ValueError("Unknown connection rule")
-                
-        elif ConnSpecIsParam(param_name):
-            SetConnSpecParam(param_name, conn_dict[param_name])
-        else:
-            raise ValueError("Unknown connection parameter")
         
     #array_size = RuleArraySize(conn_dict, source, target)    # not used for now
         
@@ -3246,7 +3258,7 @@ def ConnectDistributedFixedIndegree(source_host_list, source_group_list, target_
         source_pt_arr = (ctypes.c_void_p * len(source_pt_list))(*source_pt_list)
         
     source_n_arr = (ctypes.c_int * len(source_n_list))(*source_n_list)
-    source_n_arr_pt = ctypes.cast(source_in_arr, ctypes.c_void_p)
+    source_n_arr_pt = ctypes.cast(source_n_arr, ctypes.c_void_p)
 
     if (type(target_group_list[0])==NodeSeq):
         target_i0_list = []
@@ -3270,29 +3282,29 @@ def ConnectDistributedFixedIndegree(source_host_list, source_group_list, target_
     target_n_arr = (ctypes.c_int * len(target_n_list))(*target_n_list) 
     target_n_arr_pt = ctypes.cast(target_n_arr, ctypes.c_void_p)
         
-    if (type(source_group_list[0])==NodeSeq) & (type(target_group_list[0])==NodeSeq):
-        ret = NESTGPU_ConnectDistributedFixedIndegreeSeqSeq \ 
-        (source_host_arr_pt, len(source_host_list), source_i0_arr_pt, source_n_arr_pt, \
-         target_host_arr_pt, len(target_host_list), target_i0_arr_pt, target_n_arr_pt, \
-         host_group)
+    if (type(source_group_list[0])==NodeSeq) and (type(target_group_list[0])==NodeSeq):
+        ret = NESTGPU_ConnectDistributedFixedIndegreeSeqSeq \
+            (source_host_arr_pt, len(source_host_list), source_i0_arr_pt, source_n_arr_pt, \
+             target_host_arr_pt, len(target_host_list), target_i0_arr_pt, target_n_arr_pt, \
+             indegree, host_group)
 
-    elif (type(source_group_list[0])==NodeSeq) & (type(target_group_list[0])!=NodeSeq):
-        ret = NESTGPU_ConnectDistributedFixedIndegreeSeqGroup \ 
-        (source_host_arr_pt, len(source_host_list), source_i0_arr_pt, source_n_arr_pt, \
-         target_host_arr_pt, len(target_host_list), target_pt_arr, target_n_arr_pt, \
-         host_group)
+    elif (type(source_group_list[0])==NodeSeq) and (type(target_group_list[0])!=NodeSeq):
+        ret = NESTGPU_ConnectDistributedFixedIndegreeSeqGroup \
+            (source_host_arr_pt, len(source_host_list), source_i0_arr_pt, source_n_arr_pt, \
+             target_host_arr_pt, len(target_host_list), target_pt_arr, target_n_arr_pt, \
+             indegree, host_group)
 
-    elif (type(source_group_list[0])!=NodeSeq) & (type(target_group_list[0])==NodeSeq):
-        ret = NESTGPU_ConnectDistributedFixedIndegreeGroupSeq \ 
-        (source_host_arr_pt, len(source_host_list), source_pt_arr, source_n_arr_pt, \
-         target_host_arr_pt, len(target_host_list), target_i0_arr_pt, target_n_arr_pt, \
-         host_group)
+    elif (type(source_group_list[0])!=NodeSeq) and (type(target_group_list[0])==NodeSeq):
+        ret = NESTGPU_ConnectDistributedFixedIndegreeGroupSeq \
+            (source_host_arr_pt, len(source_host_list), source_pt_arr, source_n_arr_pt, \
+             target_host_arr_pt, len(target_host_list), target_i0_arr_pt, target_n_arr_pt, \
+             indegree, host_group)
 
     else:
-        ret = NESTGPU_ConnectDistributedFixedIndegreeGroupGroup \ 
-        (source_host_arr_pt, len(source_host_list), source_pt_arr, source_n_arr_pt, \
-         target_host_arr_pt, len(target_host_list), target_i0_arr_pt, target_n_arr_pt, \
-         host_group)
+        ret = NESTGPU_ConnectDistributedFixedIndegreeGroupGroup \
+            (source_host_arr_pt, len(source_host_list), source_pt_arr, source_n_arr_pt, \
+             target_host_arr_pt, len(target_host_list), target_pt_arr, target_n_arr_pt, \
+             indegree, host_group)
 
     if GetErrorCode() != 0:
         raise ValueError(GetErrorMessage())
