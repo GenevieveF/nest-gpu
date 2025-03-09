@@ -2096,4 +2096,70 @@ extern "C"
     }
     END_ERR_PROP return ret;
   }
+
+
+  int
+  NESTGPU_ConnectDistributedFixedIndegreeSeqSeq
+  (int *source_host_arr, int n_source_host, uint *source_arr, uint *n_source_arr,
+   int *target_host_arr, int n_target_host, uint *target_arr, uint *n_target_arr,
+   int indegree, int i_host_group )
+  {
+    int ret = 0;
+    BEGIN_ERR_PROP
+    {
+      ret = NESTGPU_instance->ConnectDistributedFixedIndegree
+	(source_host_arr, n_source_host, source_arr, n_source_arr, target_host_arr,
+	 n_target_host, target_arr, n_target_arr, indegree, i_host_group, SynSpec_instance);
+    }
+    END_ERR_PROP return ret;
+  }
+
+  int
+  NESTGPU_ConnectDistributedFixedIndegreeSeqGroup
+  (int *source_host_arr, int n_source_host, uint *source_arr, uint *n_source_arr,
+   int *target_host_arr, int n_target_host, uint **target_arr, uint *n_target_arr,
+   int indegree, int i_host_group )
+  {
+    int ret = 0;
+    BEGIN_ERR_PROP
+    {
+      ret = NESTGPU_instance->ConnectDistributedFixedIndegree
+	(source_host_arr, n_source_host, source_arr, n_source_arr, target_host_arr,
+	 n_target_host, target_arr, n_target_arr, indegree, i_host_group, SynSpec_instance);
+    }
+    END_ERR_PROP return ret;
+  }
+
+  int
+  NESTGPU_ConnectDistributedFixedIndegreeGroupSeq
+  (int *source_host_arr, int n_source_host, uint **source_arr, uint *n_source_arr,
+   int *target_host_arr, int n_target_host, uint *target_arr, uint *n_target_arr,
+   int indegree, int i_host_group )
+  {
+    int ret = 0;
+    BEGIN_ERR_PROP
+    {
+      ret = NESTGPU_instance->ConnectDistributedFixedIndegree
+	(source_host_arr, n_source_host, source_arr, n_source_arr, target_host_arr,
+	 n_target_host, target_arr, n_target_arr, indegree, i_host_group, SynSpec_instance);
+    }
+    END_ERR_PROP return ret;
+  }
+
+  int
+  NESTGPU_ConnectDistributedFixedIndegreeGroupGroup
+  (int *source_host_arr, int n_source_host, uint **source_arr, uint *n_source_arr,
+   int *target_host_arr, int n_target_host, uint **target_arr, uint *n_target_arr,
+   int indegree, int i_host_group )
+  {
+    int ret = 0;
+    BEGIN_ERR_PROP
+    {
+      ret = NESTGPU_instance->ConnectDistributedFixedIndegree
+	(source_host_arr, n_source_host, source_arr, n_source_arr, target_host_arr,
+	 n_target_host, target_arr, n_target_arr, indegree, i_host_group, SynSpec_instance);
+    }
+    END_ERR_PROP return ret;
+  }
+
 }

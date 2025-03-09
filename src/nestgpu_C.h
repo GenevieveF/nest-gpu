@@ -395,6 +395,31 @@ extern "C"
 
   int NESTGPU_RemoteCreate( int i_host, char* model_name, int n_neuron, int n_port );
 
+  int
+  NESTGPU_ConnectDistributedFixedIndegreeSeqSeq
+  (int *source_host_arr, int n_source_host, uint *source_arr, uint *n_source_arr,
+   int *target_host_arr, int n_target_host, uint *target_arr, uint *n_target_arr,
+   int indegree, int i_host_group );
+
+  int
+  NESTGPU_ConnectDistributedFixedIndegreeSeqGroup
+  (int *source_host_arr, int n_source_host, uint *source_arr, uint *n_source_arr,
+   int *target_host_arr, int n_target_host, uint **target_arr, uint *n_target_arr,
+   int indegree, int i_host_group );
+
+  int
+  NESTGPU_ConnectDistributedFixedIndegreeGroupSeq
+  (int *source_host_arr, int n_source_host, uint **source_arr, uint *n_source_arr,
+   int *target_host_arr, int n_target_host, uint *target_arr, uint *n_target_arr,
+   int indegree, int i_host_group );
+
+  int
+  NESTGPU_ConnectDistributedFixedIndegreeGroupGroup
+  (int *source_host_arr, int n_source_host, uint **source_arr, uint *n_source_arr,
+   int *target_host_arr, int n_target_host, uint **target_arr, uint *n_target_arr,
+   int indegree, int i_host_group );
+
+  
 #ifdef __cplusplus
 }
 #endif
