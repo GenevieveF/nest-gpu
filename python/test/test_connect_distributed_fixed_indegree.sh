@@ -1,7 +1,8 @@
 echo "To run this test you must search the keyword"
 echo "test_connect_distributed_fixed_indegree in the file"
-echo "remote_connect.sh and uncomment the next line"
-echo "Remember to recomment it after the test!"
+echo "src/remote_connect.h, uncomment the next line, rebuild"
+echo "and reinstall NEST GPU"
+echo "Remember to comment it again, rebuild and reinstall NEST GPU after the test!"
 echo
 :> tmp1.dat
 :> tmp2.dat
