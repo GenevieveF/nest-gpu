@@ -594,8 +594,12 @@ copass_sort::sort( KeyT* d_keys, position_t n, position_t block_size, void* d_st
   int64_t ext_st_bytes = 0;
   for ( uint i = 0; i < k; i++ )
   {
-    array_GPUSort( h_subarray[ i ], d_storage, ext_st_bytes );
-    if ( d_storage == NULL )
+    int64_t ext_st_bytes_tmp = 0;
+    array_GPUSort( h_subarray[ i ], d_storage, ext_st_bytes_tmp );
+    ext_st_bytes = max(ext_st_bytes, ext_st_bytes_tmp);
+    // the maximum storage requirement can be computed as the maximum between the first and second block
+    // no matter the number of blocks
+    if ( d_storage == NULL  && i > 0 )
     {
       break;
     }
@@ -677,8 +681,12 @@ copass_sort::sort( KeyT* d_keys,
   int64_t ext_st_bytes = 0;
   for ( uint i = 0; i < k; i++ )
   {
-    array_GPUSort( array_block[ i ], d_storage, ext_st_bytes );
-    if ( d_storage == NULL )
+    int64_t ext_st_bytes_tmp = 0;
+    array_GPUSort( array_block[ i ], d_storage, ext_st_bytes_tmp );
+    ext_st_bytes = max(ext_st_bytes, ext_st_bytes_tmp);
+    // the maximum storage requirement can be computed as the maximum between the first and second block
+    // no matter the number of blocks
+    if ( d_storage == NULL  && i > 0 )
     {
       break;
     }
@@ -735,8 +743,12 @@ copass_sort::sort( KeyT** key_subarray, position_t n, position_t block_size, voi
   for ( uint i = 0; i < k; i++ )
   {
     contiguous_array< KeyT > key_block = getBlock( h_key_array, i );
-    array_GPUSort( key_block, d_storage, ext_st_bytes );
-    if ( d_storage == NULL && i > 0 )
+    int64_t ext_st_bytes_tmp = 0;
+    array_GPUSort( key_block, d_storage, ext_st_bytes_tmp );
+    ext_st_bytes = max(ext_st_bytes, ext_st_bytes_tmp);
+    // the maximum storage requirement can be computed as the maximum between the first and second block
+    // no matter the number of blocks
+    if ( d_storage == NULL  && i > 0 )
     {
       break;
     }
@@ -821,9 +833,12 @@ copass_sort::sort( KeyT** key_subarray, ValueT** value_subarray, position_t n,
   for ( uint i = 0; i < k; i++ )
   {
     contiguous_key_value< KeyT, ValueT > key_value_block = getBlock( h_key_value, i );
-    array_GPUSort( key_value_block, d_storage, ext_st_bytes );
-
-    if ( d_storage == NULL && i > 0 )
+    int64_t ext_st_bytes_tmp = 0;
+    array_GPUSort( key_value_block, d_storage, ext_st_bytes_tmp );
+    ext_st_bytes = max(ext_st_bytes, ext_st_bytes_tmp);
+    // the maximum storage requirement can be computed as the maximum between the first and second block
+    // no matter the number of blocks
+    if ( d_storage == NULL  && i > 0 )
     {
       break;
     }
