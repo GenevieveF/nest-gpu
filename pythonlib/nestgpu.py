@@ -3242,9 +3242,9 @@ def ConnectDistributedFixedIndegree(source_host_list, source_group_list, target_
     if (type(source_group_list[0])==NodeSeq):
         source_i0_list = []
         source_n_list = []
-        for source_group in source_group_list:
-            source_i0_list.append(source.i0)
-            source_n_list.append(source.n)    
+        for source_seq in source_group_list:
+            source_i0_list.append(source_seq.i0)
+            source_n_list.append(source_seq.n)    
         
         source_i0_arr = (ctypes.c_int * len(source_i0_list))(*source_i0_list)
         source_i0_arr_pt = ctypes.cast(source_i0_arr, ctypes.c_void_p)
@@ -3264,9 +3264,9 @@ def ConnectDistributedFixedIndegree(source_host_list, source_group_list, target_
     if (type(target_group_list[0])==NodeSeq):
         target_i0_list = []
         target_n_list = []
-        for target_group in target_group_list:
-            target_i0_list.append(target.i0)
-            target_n_list.append(target.n)    
+        for target_seq in target_group_list:
+            target_i0_list.append(target_seq.i0)
+            target_n_list.append(target_seq.n)    
         
         target_i0_arr = (ctypes.c_int * len(target_i0_list))(*target_i0_list)
         target_i0_arr_pt = ctypes.cast(target_i0_arr, ctypes.c_void_p)

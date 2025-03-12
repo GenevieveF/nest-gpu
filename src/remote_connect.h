@@ -45,6 +45,23 @@ __device__ bool
 checkIfValueIsIn2DArr( uint value, uint** arr, uint n_elem, uint block_size, uint* i_block, uint* i_in_block );
 
 template < class ConnKeyT >
+__global__ void
+checkUsedSourceNodeKernel( ConnKeyT* conn_key_subarray, int64_t n_conn, uint* source_node_flag , int this_host, uint n_source)
+{
+  int64_t i_conn = threadIdx.x + blockIdx.x * blockDim.x;
+  if ( i_conn >= n_conn )
+  {
+    return;
+  }
+  inode_t i_source = getConnSource< ConnKeyT >( conn_key_subarray[ i_conn ] );
+  if (i_source >= n_source) {
+    printf("this_host: %d\t CUSNK i_source: %d\tn_source: %d, i_conn: %ld\n", this_host, i_source, n_source, i_conn);
+  }
+  // printf("i_conn: %ld\t i_source: %d\n", i_conn, i_source);
+}
+
+
+template < class ConnKeyT >
 // kernel that flags source nodes used in at least one new connection
 // of a given block
 __global__ void
@@ -263,7 +280,8 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::allocLocalSourceNodeMapBlocks( std:
 // Loop on all new connections and set source_node_flag[i_source]=true
 template < class ConnKeyT, class ConnStructT >
 int
-ConnectionTemplate< ConnKeyT, ConnStructT >::setUsedSourceNodes( int64_t old_n_conn, uint* d_source_node_flag )
+ConnectionTemplate< ConnKeyT, ConnStructT >::setUsedSourceNodes( int64_t old_n_conn, uint* d_source_node_flag)
+// , int n_source ) // uncomment only for debugging
 {
   int64_t n_new_conn = n_conn_ - old_n_conn; // number of new connections
 
@@ -294,6 +312,11 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::setUsedSourceNodes( int64_t old_n_c
       n_block_conn = conn_block_size_;
     }
 
+    // uncomment only for debugging
+    //checkUsedSourceNodeKernel< ConnKeyT > <<< ( n_block_conn + 1023 ) / 1024, 1024 >>>
+    //  (conn_key_vect_[ ib ] + i_conn0, n_block_conn, d_source_node_flag, this_host_, n_source);
+    //CUDASYNC;
+    
     setUsedSourceNodeKernel< ConnKeyT > <<< ( n_block_conn + 1023 ) / 1024, 1024 >>>(
       conn_key_vect_[ ib ] + i_conn0, n_block_conn, d_source_node_flag );
     CUDASYNC;
@@ -1103,10 +1126,12 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectSource( int source_hos
   {
     return 0;
   }
-  
+
+  // printf("this_host: %d\tn_source: %d, n_conn_; %ld\told_n_conn: %ld\n", this_host_, n_source, n_conn_, old_n_conn);
   // flag source nodes used in at least one new connection
   // Loop on all new connections and set source_node_flag[i_source]=true
-  setUsedSourceNodes( old_n_conn, d_source_node_flag );
+  setUsedSourceNodes( old_n_conn, d_source_node_flag);
+  //, n_source ); // uncomment only for debugging
 
   // Count source nodes actually used in new connections
   // Allocate n_used_source_nodes and initialize it to 0
@@ -1858,7 +1883,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
 
   // compute number of new connections that must be created
   int64_t n_new_conn_tot = n_target*indegree;
-  //printf("this_host: %d\tn_new_conn_tot: %ld\tconn_block_size_: %ld\tindegree: %d\n", this_host_, n_new_conn_tot, conn_block_size_, indegree);
+  // printf("this_host: %d\tn_new_conn_tot: %ld\tconn_block_size_: %ld\tindegree: %d\n", this_host_, n_new_conn_tot, conn_block_size_, indegree);
 
   // Create new connection blocks as needed
   int new_n_block = ( int ) ( ( n_conn_ + n_new_conn_tot + conn_block_size_ - 1 ) / conn_block_size_ );
@@ -1917,7 +1942,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
       // generate array of 64 bit random unsigned integers
       curandGenerateLongLong(conn_random_generator_[ this_host_ ][ this_host_ ],
 			     (unsigned long long*)conn_key_vect_[ ib ] + i_conn0,
-			     n_block_conn*sizeof(unsigned long long));
+			     n_block_conn);
       // Replace each 64 bit random integer with its modulo in the range from 0 to n_source_tot - 1
       moduloKernel< unsigned long long > <<< ( n_block_conn + 1023 ) / 1024, 1024 >>>
 	((unsigned long long*)conn_key_vect_[ ib ] + i_conn0, n_block_conn, n_source_tot);
@@ -1926,7 +1951,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
     else {
       // generate array of 32 bit random unsigned integers
       curandGenerate(conn_random_generator_[ this_host_ ][ this_host_ ],
-		     (unsigned int*)conn_key_vect_[ ib ] + i_conn0, n_block_conn*sizeof(unsigned int));
+		     (unsigned int*)conn_key_vect_[ ib ] + i_conn0, n_block_conn);
 
       // Replace each 32 bit random integer with its modulo in the range from 0 to n_source_tot - 1
       moduloKernel< unsigned int > <<< ( n_block_conn + 1023 ) / 1024, 1024 >>>
@@ -1984,7 +2009,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
   for (int ish=0; ish<n_source_host; ish++) {
     // Locate (search) the current element of the n_source_cumul array in the conn_key_vect_ block
     int64_t value = n_source_cumul[ish+1];
-    //printf("ish: %d\tvalue: %ld\n", ish, value);
+    // printf("ish: %d\tvalue: %ld\n", ish, value);
     
     int64_t n_block_conn; // number of new connections in the current block of the loop
     int64_t i_conn0;      // index of first new connection in this block
@@ -2107,6 +2132,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
     // filled only with source node relative indexes and target node
     // indexes and fills them with weights, delays, syn_geoups, ports
     ConnSpec conn_spec(ASSIGNED_NODES, n_new_conn);
+    // printf("this_host: %d\tish: %d\tn_source_arr[ish]: %d\n",  this_host_, ish, n_source_arr[ish]);  
     ret = remoteConnectSource< T1, T2 >( source_host_arr[ish], d_source_arr[ish], n_source_arr[ish],
 					 d_target, n_target, group_local_id, conn_spec, syn_spec );
 
