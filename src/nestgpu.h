@@ -286,7 +286,7 @@ class NESTGPU
   double SendSpikeToRemote_CUDAcp_time_;
 
   double RecvSpikeFromRemote_CUDAcp_time_;
-
+    
   bool first_simulation_flag_;
 
 public:

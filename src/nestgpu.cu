@@ -345,6 +345,8 @@ NESTGPU::setConnStructType( int conn_struct_type )
   
   // set start real time in connection object
   conn_->setStartRealTime( start_real_time_ );
+
+  conn_->InitTimers();
   
   return 0;
 }
@@ -612,6 +614,25 @@ NESTGPU::EndSimulation()
     std::cout << HostIdStr() << "  RecvSpikeFromRemote_comm_time: " << RecvSpikeFromRemote_comm_time_ << "\n";
     std::cout << HostIdStr() << "  SendSpikeToRemote_CUDAcp_time: " << SendSpikeToRemote_CUDAcp_time_ << "\n";
     std::cout << HostIdStr() << "  RecvSpikeFromRemote_CUDAcp_time: " << RecvSpikeFromRemote_CUDAcp_time_ << "\n";
+  }
+  if ( n_hosts_ > 1 && verbosity_level_ >= 5 )
+  {
+    std::cout << HostIdStr() << "  InsertHostGroupSourceNode_time: " << conn_->InsertHostGroupSourceNode_time_ << "\n";
+    std::cout << HostIdStr() << "  RemoteConnectSource_time: " << conn_->RemoteConnectSource_time_ << "\n";
+    std::cout << HostIdStr() << "  ConnectRemoteConnectSource_time: " << conn_->ConnectRemoteConnectSource_time_ << "\n";
+    std::cout << HostIdStr() << "  SetUsedSourceNodes_time: " << conn_->SetUsedSourceNodes_time_ << "\n";
+    std::cout << HostIdStr() << "  CountUsedSourceNodes_time: " << conn_->CountUsedSourceNodes_time_ << "\n";
+    std::cout << HostIdStr() << "  AllocUsedSourceNodes_time: " << conn_->AllocUsedSourceNodes_time_ << "\n";
+    std::cout << HostIdStr() << "  GetUsedSourceNodeIndex_time: " << conn_->GetUsedSourceNodeIndex_time_ << "\n";
+    std::cout << HostIdStr() << "  SortUsedSourceNodeIndex_time: " << conn_->SortUsedSourceNodeIndex_time_ << "\n";
+    std::cout << HostIdStr() << "  AllocNodeToMap_time: " << conn_->AllocNodeToMap_time_ << "\n";
+    std::cout << HostIdStr() << "  SearchNodeIndexNotInMap_time: " << conn_->SearchNodeIndexNotInMap_time_ << "\n";
+    std::cout << HostIdStr() << "  AllocRemoteSourceNodeMapBlocks_time: " << conn_->AllocRemoteSourceNodeMapBlocks_time_ << "\n";
+    std::cout << HostIdStr() << "  InsertNodesInMap_time: " << conn_->InsertNodesInMap_time_ << "\n";
+    std::cout << HostIdStr() << "  SortSourceImageNodeMap_time: " << conn_->SortSourceImageNodeMap_time_ << "\n";
+    std::cout << HostIdStr() << "  SetLocalNodeIndex_time: " << conn_->SetLocalNodeIndex_time_ << "\n";
+    std::cout << HostIdStr() << "  FixConnectionSourceNodeIndexes_time: " << conn_->FixConnectionSourceNodeIndexes_time_ << "\n";
+    
   }
 
   if ( verbosity_level_ >= 1 )

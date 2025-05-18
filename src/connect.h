@@ -64,6 +64,22 @@ typedef uint iconngroup_t;
 class Connection
 {
 public:
+  double InsertHostGroupSourceNode_time_;
+  double RemoteConnectSource_time_;
+  double ConnectRemoteConnectSource_time_;
+  double SetUsedSourceNodes_time_;
+  double CountUsedSourceNodes_time_;
+  double AllocUsedSourceNodes_time_;
+  double GetUsedSourceNodeIndex_time_;
+  double SortUsedSourceNodeIndex_time_;
+  double AllocNodeToMap_time_;
+  double SearchNodeIndexNotInMap_time_;
+  double AllocRemoteSourceNodeMapBlocks_time_;
+  double InsertNodesInMap_time_;
+  double SortSourceImageNodeMap_time_;
+  double SetLocalNodeIndex_time_;
+  double FixConnectionSourceNodeIndexes_time_;
+
   virtual ~Connection() {}; // destructor
 
   virtual int calibrate() = 0; // method called by nestgpu calibration
@@ -380,6 +396,24 @@ public:
    int *target_host_arr, int n_target_host, inode_t **h_target_arr, inode_t *n_target_arr,
    int indegree, int i_host_group, SynSpec &syn_spec) = 0;
 
+  int InitTimers() {
+      InsertHostGroupSourceNode_time_ = 0;
+      RemoteConnectSource_time_ = 0;
+      ConnectRemoteConnectSource_time_ = 0;
+      SetUsedSourceNodes_time_ = 0;
+      CountUsedSourceNodes_time_ = 0;
+      AllocUsedSourceNodes_time_ = 0;
+      GetUsedSourceNodeIndex_time_ = 0;
+      SortUsedSourceNodeIndex_time_ = 0;
+      AllocNodeToMap_time_ = 0;
+      SearchNodeIndexNotInMap_time_ = 0;
+      AllocRemoteSourceNodeMapBlocks_time_ = 0;
+      InsertNodesInMap_time_ = 0;
+      SortSourceImageNodeMap_time_ = 0;
+      SetLocalNodeIndex_time_ = 0;
+      FixConnectionSourceNodeIndexes_time_ = 0;
+      return 0;
+  }
 };
 
 
