@@ -3009,6 +3009,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_Connect( curandGenerator_t& gen,
     rev_conn_flag_ = true;
   }
 
+  float used_all_source_node_threshold_fact = 2.0;
   switch ( conn_spec.rule_ )
   {
   case ONE_TO_ONE:
@@ -3018,21 +3019,30 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_Connect( curandGenerator_t& gen,
         "Number of source and target nodes must be equal "
         "for the one-to-one connection rule" );
     }
+    conn_spec.use_all_remote_source_nodes_ = true;
     return connectOneToOne< T1, T2 >( gen, source, target, n_source, syn_spec, remote_source_flag );
     break;
 
   case ALL_TO_ALL:
+    conn_spec.use_all_remote_source_nodes_ = true;
     return connectAllToAll< T1, T2 >( gen, source, n_source, target, n_target, syn_spec, remote_source_flag );
     break;
   case FIXED_TOTAL_NUMBER:
+    if (conn_spec.total_num_ >= (int)(used_all_source_node_threshold_fact*n_source)) {
+      conn_spec.use_all_remote_source_nodes_ = true;
+    }
     return connectFixedTotalNumber< T1, T2 >(
       gen, source, n_source, target, n_target, conn_spec.total_num_, syn_spec, remote_source_flag );
     break;
   case FIXED_INDEGREE:
+    if (conn_spec.indegree_ * n_target >= (uint)(used_all_source_node_threshold_fact*n_source)) {
+      conn_spec.use_all_remote_source_nodes_ = true;
+    }
     return connectFixedIndegree< T1, T2 >(
       gen, source, n_source, target, n_target, conn_spec.indegree_, syn_spec, remote_source_flag );
     break;
   case FIXED_OUTDEGREE:
+    conn_spec.use_all_remote_source_nodes_ = true;
     return connectFixedOutdegree< T1, T2 >(
       gen, source, n_source, target, n_target, conn_spec.outdegree_, syn_spec, remote_source_flag );
     break;

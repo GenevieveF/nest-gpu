@@ -68,6 +68,7 @@ public:
   int total_num_;
   int indegree_;
   int outdegree_;
+  bool use_all_remote_source_nodes_;
 
   ConnSpec();
   ConnSpec( int rule, int degree = 0 );

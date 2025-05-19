@@ -36,6 +36,8 @@ ConnSpec::Init()
   total_num_ = 0;
   indegree_ = 0;
   outdegree_ = 0;
+  use_all_remote_source_nodes_ = false;
+  
   return 0;
 }
 

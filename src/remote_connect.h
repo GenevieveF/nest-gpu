@@ -91,22 +91,25 @@ getUsedSourceNodeIndexKernel( T source,
   uint n_source,
   uint* n_used_source_nodes,
   uint* source_node_flag,
-  uint* u_source_node_idx,
-  uint* i_source_arr )
+  uint* u_source_node_idx)
 {
   uint i_source = threadIdx.x + blockIdx.x * blockDim.x;
   if ( i_source >= n_source )
   {
     return;
   }
-  // Count how many source_node_flag are true using atomic increase
-  // on n_used_source_nodes
-  if ( source_node_flag[ i_source ] != 0 )
-  {
-    uint pos = atomicAdd( n_used_source_nodes, 1 );
-    u_source_node_idx[ pos ] = getNodeIndex( source, i_source );
-    i_source_arr[ pos ] = i_source;
+  if (source_node_flag != nullptr) {
+    // Count how many source_node_flag are true using atomic increase
+    // on n_used_source_nodes
+    if ( source_node_flag[ i_source ] != 0 ) {
+      uint pos = atomicAdd( n_used_source_nodes, 1 );
+      u_source_node_idx[ pos ] = getNodeIndex( source, i_source );
+    }
   }
+  else {
+    u_source_node_idx[ i_source ] = getNodeIndex( source, i_source );
+  }
+    
 }
 
 // kernel that counts source nodes actually used in new connections
@@ -131,7 +134,7 @@ setLocalNodeIndexKernel( T source,
   }
   // Count how many source_node_flag are true using atomic increase
   // on n_used_source_nodes
-  if ( source_node_flag[ i_source ] != 0 )
+  if ( source_node_flag == nullptr || source_node_flag[ i_source ] != 0 )
   {
     uint node_index = getNodeIndex( source, i_source );
     uint i_block;
@@ -1106,22 +1109,6 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectSource( int source_hos
   //   (1 << (h_MaxPortSynNBits - max_syn_nbits_ - 1));
   syn_spec.syn_group_ = syn_spec.syn_group_ | ( 1 << max_syn_nbits_ );
 
-  // check if the flag UseAllSourceNodes[conn_rule] is false
-  // if (!use_all_source_nodes_flag) {
-
-  // on both the source and target hosts create a temporary array
-  // of booleans having size equal to the number of source nodes
-
-  uint* d_source_node_flag; // [n_source] // each element is initially false
-  CUDAMALLOCCTRL( "&d_source_node_flag", &d_source_node_flag, n_source * sizeof( uint ) );
-  gpuErrchk( cudaMemset( d_source_node_flag, 0, n_source * sizeof( uint ) ) );
-
-  // on the target hosts create a temporary array of integers having size
-  // equal to the number of source nodes
-
-  uint* d_local_node_index; // [n_source]; // only on target host
-  CUDAMALLOCCTRL( "&d_local_node_index", &d_local_node_index, n_source * sizeof( uint ) );
-
   time_mark = getRealTime();
   int64_t old_n_conn = n_conn_;
   // The connect command is performed on both source and target host using
@@ -1135,98 +1122,103 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectSource( int source_hos
     return 0;
   }
 
-  // printf("this_host: %d\tn_source: %d, n_conn_; %ld\told_n_conn: %ld\n", this_host_, n_source, n_conn_, old_n_conn);
-  // flag source nodes used in at least one new connection
-  // Loop on all new connections and set source_node_flag[i_source]=true
-  time_mark = getRealTime();
-  setUsedSourceNodes( old_n_conn, d_source_node_flag);
-  SetUsedSourceNodes_time_ += (getRealTime() - time_mark);
-  //, n_source ); // uncomment only for debugging
-
-  // Count source nodes actually used in new connections
-  // Allocate n_used_source_nodes and initialize it to 0
-  uint* d_n_used_source_nodes;
-  CUDAMALLOCCTRL( "&d_n_used_source_nodes", &d_n_used_source_nodes, sizeof( uint ) );
-  gpuErrchk( cudaMemset( d_n_used_source_nodes, 0, sizeof( uint ) ) );
-  // Launch kernel to count used nodes
-  time_mark = getRealTime();
-  countUsedSourceNodeKernel<<< ( n_source + 1023 ) / 1024, 1024 >>>(
-    n_source, d_n_used_source_nodes, d_source_node_flag );
-  gpuErrchk( cudaPeekAtLastError() );
-  gpuErrchk( cudaDeviceSynchronize() );
-  CountUsedSourceNodes_time_ += (getRealTime() - time_mark);
-
-  // copy result from GPU to CPU memory
-  uint n_used_source_nodes;
-  gpuErrchk( cudaMemcpy( &n_used_source_nodes, d_n_used_source_nodes, sizeof( uint ), cudaMemcpyDeviceToHost ) );
+  uint n_used_source_nodes; // number of nodes actually used in new connections
+  uint* d_n_used_source_nodes = nullptr;
   
-  // Define and allocate arrays of size n_used_source_nodes
-  uint* d_unsorted_source_node_index; // [n_used_source_nodes];
-  uint* d_sorted_source_node_index;   // [n_used_source_nodes];
-  // i_source_arr are the positions in the arrays source_node_flag
-  // and local_node_index
-  uint* d_i_unsorted_source_arr;          // [n_used_source_nodes];
-  uint* d_i_sorted_source_arr;            // [n_used_source_nodes];
-  bool* d_source_node_index_to_be_mapped; //[n_used_source_nodes]; // initially
-                                          // false
-  time_mark = getRealTime();
-  CUDAMALLOCCTRL(
-    "&d_unsorted_source_node_index", &d_unsorted_source_node_index, n_used_source_nodes * sizeof( uint ) );
-  CUDAMALLOCCTRL( "&d_sorted_source_node_index", &d_sorted_source_node_index, n_used_source_nodes * sizeof( uint ) );
-  CUDAMALLOCCTRL( "&d_i_unsorted_source_arr", &d_i_unsorted_source_arr, n_used_source_nodes * sizeof( uint ) );
-  CUDAMALLOCCTRL( "&d_i_sorted_source_arr", &d_i_sorted_source_arr, n_used_source_nodes * sizeof( uint ) );
-  CUDAMALLOCCTRL(
-    "&d_source_node_index_to_be_mapped", &d_source_node_index_to_be_mapped, n_used_source_nodes * sizeof( int8_t ) );
-  // source_node_index_to_be_mapped is initially false
-  gpuErrchk( cudaMemset( d_source_node_index_to_be_mapped, 0, n_used_source_nodes * sizeof( int8_t ) ) );
-  AllocUsedSourceNodes_time_ += (getRealTime() - time_mark);
+  // flags to mark if nodes are actually used in a connection
+  // used only if use_all_remote_source_nodes_ is false, otherwise it remains equal to nullptr
+  uint* d_source_node_flag = nullptr; // [n_source] // each element is initially false
+  // check if the connection rule or number of connections is such that all remote source nodes should actually be used
+  if (!conn_spec.use_all_remote_source_nodes_) {
+    // on both the source and target hosts create a temporary array
+    // of booleans having size equal to the number of source nodes
+
+
+    CUDAMALLOCCTRL( "&d_source_node_flag", &d_source_node_flag, n_source * sizeof( uint ) );
+    gpuErrchk( cudaMemset( d_source_node_flag, 0, n_source * sizeof( uint ) ) );
+    
+    // printf("this_host: %d\tn_source: %d, n_conn_; %ld\told_n_conn: %ld\n", this_host_, n_source, n_conn_, old_n_conn);
+    // flag source nodes used in at least one new connection
+
+    // Loop on all new connections and set source_node_flag[i_source]=true
+    time_mark = getRealTime();
+    setUsedSourceNodes( old_n_conn, d_source_node_flag);
+    SetUsedSourceNodes_time_ += (getRealTime() - time_mark);
+    //, n_source ); // uncomment only for debugging
+
+    // Count source nodes actually used in new connections
+    // Allocate n_used_source_nodes and initialize it to 0
+    CUDAMALLOCCTRL( "&d_n_used_source_nodes", &d_n_used_source_nodes, sizeof( uint ) );
+    gpuErrchk( cudaMemset( d_n_used_source_nodes, 0, sizeof( uint ) ) );
+    // Launch kernel to count used nodes
+    time_mark = getRealTime();
+    countUsedSourceNodeKernel<<< ( n_source + 1023 ) / 1024, 1024 >>>
+      (n_source, d_n_used_source_nodes, d_source_node_flag );
+    gpuErrchk( cudaPeekAtLastError() );
+    gpuErrchk( cudaDeviceSynchronize() );
+    CountUsedSourceNodes_time_ += (getRealTime() - time_mark);
+
+    // copy result from GPU to CPU memory
+    gpuErrchk( cudaMemcpy( &n_used_source_nodes, d_n_used_source_nodes, sizeof( uint ), cudaMemcpyDeviceToHost ) );
+    // Reset n_used_source_nodes to 0
+    gpuErrchk( cudaMemset( d_n_used_source_nodes, 0, sizeof( uint ) ) );
+  }
+  else {
+    n_used_source_nodes = n_source;
+  }
+
+  // Define unsorted and sorted arrays of source node indexes
+  uint* d_unsorted_source_node_index = nullptr; // [n_used_source_nodes];
+  uint* d_sorted_source_node_index = nullptr;   // [n_used_source_nodes];
+
+  if (true) { //(controllare_se_non_e_una_sequenza) {
+    // Allocate arrays of size n_used_source_nodes
+    time_mark = getRealTime();
+    CUDAMALLOCCTRL( "&d_unsorted_source_node_index", &d_unsorted_source_node_index, n_used_source_nodes * sizeof( uint ) );
+    CUDAMALLOCCTRL( "&d_sorted_source_node_index", &d_sorted_source_node_index, n_used_source_nodes * sizeof( uint ) );
+    AllocUsedSourceNodes_time_ += (getRealTime() - time_mark);
   
-  // Fill the arrays of nodes actually used by new connections
-  // Reset n_used_source_nodes to 0
-  gpuErrchk( cudaMemset( d_n_used_source_nodes, 0, sizeof( uint ) ) );
-  // Launch kernel to fill the arrays
-  time_mark = getRealTime();
-  getUsedSourceNodeIndexKernel<<< ( n_source + 1023 ) / 1024, 1024 >>>( source,
-    n_source,
-    d_n_used_source_nodes,
-    d_source_node_flag,
-    d_unsorted_source_node_index,
-    d_i_unsorted_source_arr );
-  gpuErrchk( cudaPeekAtLastError() );
-  gpuErrchk( cudaDeviceSynchronize() );
-  GetUsedSourceNodeIndex_time_ += (getRealTime() - time_mark);
+    // Fill the arrays of nodes actually used by new connections
+    // Launch kernel to fill the arrays
+    time_mark = getRealTime();
+    getUsedSourceNodeIndexKernel<<< ( n_source + 1023 ) / 1024, 1024 >>>
+      ( source,
+	n_source,
+	d_n_used_source_nodes,
+	d_source_node_flag,
+	d_unsorted_source_node_index);
+    gpuErrchk( cudaPeekAtLastError() );
+    gpuErrchk( cudaDeviceSynchronize() );
+    GetUsedSourceNodeIndex_time_ += (getRealTime() - time_mark);
+
+    // Sort the arrays using unsorted_source_node_index as key
+    // and i_source as value -> sorted_source_node_index
+    time_mark = getRealTime();
+    // Determine temporary storage requirements for RadixSort
+    void* d_sort_storage = NULL;
+    size_t sort_storage_bytes = 0;
+    //<BEGIN-CLANG-TIDY-SKIP>//
+    cub::DeviceRadixSort::SortKeys( d_sort_storage,
+				    sort_storage_bytes,
+				    d_unsorted_source_node_index,
+				    d_sorted_source_node_index,
+				    n_used_source_nodes );
+    //<END-CLANG-TIDY-SKIP>//
+
+    // Allocate temporary storage
+    CUDAMALLOCCTRL( "&d_sort_storage", &d_sort_storage, sort_storage_bytes );
+
+    // Run sorting operation
+    //<BEGIN-CLANG-TIDY-SKIP>//
+    cub::DeviceRadixSort::SortKeys( d_sort_storage,
+				    sort_storage_bytes,
+				    d_unsorted_source_node_index,
+				    d_sorted_source_node_index,
+				    n_used_source_nodes );
+    //<END-CLANG-TIDY-SKIP>//
+    SortUsedSourceNodeIndex_time_ += (getRealTime() - time_mark);
+  }
   
-  // Sort the arrays using unsorted_source_node_index as key
-  // and i_source as value -> sorted_source_node_index
-  time_mark = getRealTime();
-  // Determine temporary storage requirements for RadixSort
-  void* d_sort_storage = NULL;
-  size_t sort_storage_bytes = 0;
-  //<BEGIN-CLANG-TIDY-SKIP>//
-  cub::DeviceRadixSort::SortPairs( d_sort_storage,
-    sort_storage_bytes,
-    d_unsorted_source_node_index,
-    d_sorted_source_node_index,
-    d_i_unsorted_source_arr,
-    d_i_sorted_source_arr,
-    n_used_source_nodes );
-  //<END-CLANG-TIDY-SKIP>//
-
-  // Allocate temporary storage
-  CUDAMALLOCCTRL( "&d_sort_storage", &d_sort_storage, sort_storage_bytes );
-
-  // Run sorting operation
-  //<BEGIN-CLANG-TIDY-SKIP>//
-  cub::DeviceRadixSort::SortPairs( d_sort_storage,
-    sort_storage_bytes,
-    d_unsorted_source_node_index,
-    d_sorted_source_node_index,
-    d_i_unsorted_source_arr,
-    d_i_sorted_source_arr,
-    n_used_source_nodes );
-  //<END-CLANG-TIDY-SKIP>//
-  SortUsedSourceNodeIndex_time_ += (getRealTime() - time_mark);
-
   //////////////////////////////
   // Allocate array of remote source node map blocks
   // and copy their address from host to device
@@ -1412,6 +1404,11 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectSource( int source_hos
   CUDAFREECTRL( "d_storage", d_storage );
   SortSourceImageNodeMap_time_ += (getRealTime() - time_mark);
 
+  // on the target hosts create a temporary array of integers having size
+  // equal to the number of source nodes
+  uint* d_local_node_index; // [n_source]; // only on target host
+  CUDAMALLOCCTRL( "&d_local_node_index", &d_local_node_index, n_source * sizeof( uint ) );
+
   // Launch kernel that searches source node indexes in the map
   // and set corresponding values of local_node_index
   time_mark = getRealTime();
@@ -1503,21 +1500,9 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectTarget( int target_hos
   // Define and allocate arrays of size n_used_source_nodes
   uint* d_unsorted_source_node_index; // [n_used_source_nodes];
   uint* d_sorted_source_node_index;   // [n_used_source_nodes];
-  // i_source_arr are the positions in the arrays source_node_flag
-  // and local_node_index
-  uint* d_i_unsorted_source_arr;          // [n_used_source_nodes];
-  uint* d_i_sorted_source_arr;            // [n_used_source_nodes];
-  bool* d_source_node_index_to_be_mapped; //[n_used_source_nodes]; // initially
-                                          // false
   CUDAMALLOCCTRL(
     "&d_unsorted_source_node_index", &d_unsorted_source_node_index, n_used_source_nodes * sizeof( uint ) );
   CUDAMALLOCCTRL( "&d_sorted_source_node_index", &d_sorted_source_node_index, n_used_source_nodes * sizeof( uint ) );
-  CUDAMALLOCCTRL( "&d_i_unsorted_source_arr", &d_i_unsorted_source_arr, n_used_source_nodes * sizeof( uint ) );
-  CUDAMALLOCCTRL( "&d_i_sorted_source_arr", &d_i_sorted_source_arr, n_used_source_nodes * sizeof( uint ) );
-  CUDAMALLOCCTRL(
-    "&d_source_node_index_to_be_mapped", &d_source_node_index_to_be_mapped, n_used_source_nodes * sizeof( int8_t ) );
-  // source_node_index_to_be_mapped is initially false
-  gpuErrchk( cudaMemset( d_source_node_index_to_be_mapped, 0, n_used_source_nodes * sizeof( int8_t ) ) );
 
   // Fill the arrays of nodes actually used by new connections
   // Reset n_used_source_nodes to 0
@@ -1527,8 +1512,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectTarget( int target_hos
     n_source,
     d_n_used_source_nodes,
     d_source_node_flag,
-    d_unsorted_source_node_index,
-    d_i_unsorted_source_arr );
+    d_unsorted_source_node_index);
   gpuErrchk( cudaPeekAtLastError() );
   gpuErrchk( cudaDeviceSynchronize() );
 
@@ -1539,12 +1523,10 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectTarget( int target_hos
   void* d_sort_storage = NULL;
   size_t sort_storage_bytes = 0;
   //<BEGIN-CLANG-TIDY-SKIP>//
-  cub::DeviceRadixSort::SortPairs( d_sort_storage,
+  cub::DeviceRadixSort::SortKeys( d_sort_storage,
     sort_storage_bytes,
     d_unsorted_source_node_index,
     d_sorted_source_node_index,
-    d_i_unsorted_source_arr,
-    d_i_sorted_source_arr,
     n_used_source_nodes );
   //<END-CLANG-TIDY-SKIP>//
 
@@ -1553,12 +1535,10 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectTarget( int target_hos
 
   // Run sorting operation
   //<BEGIN-CLANG-TIDY-SKIP>//
-  cub::DeviceRadixSort::SortPairs( d_sort_storage,
+  cub::DeviceRadixSort::SortKeys( d_sort_storage,
     sort_storage_bytes,
     d_unsorted_source_node_index,
     d_sorted_source_node_index,
-    d_i_unsorted_source_arr,
-    d_i_sorted_source_arr,
     n_used_source_nodes );
   //<END-CLANG-TIDY-SKIP>//
 
@@ -1869,6 +1849,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
     }
   }
 
+  float used_all_source_node_threshold_fact = 2.0;
   // arrays of source and target nodes of each source and target host in GPU memory
   // They can be either the index of the first node of each source/target group
   // or pointers to arrays of indexes
@@ -2162,7 +2143,10 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
     // filled only with source node relative indexes and target node
     // indexes and fills them with weights, delays, syn_geoups, ports
     ConnSpec conn_spec(ASSIGNED_NODES, n_new_conn);
-    // printf("this_host: %d\tish: %d\tn_source_arr[ish]: %d\n",  this_host_, ish, n_source_arr[ish]);  
+    // printf("this_host: %d\tish: %d\tn_source_arr[ish]: %d\n",  this_host_, ish, n_source_arr[ish]);
+    if (n_new_conn >= (int)(used_all_source_node_threshold_fact * n_source_arr[ish])) {
+      conn_spec.use_all_remote_source_nodes_ = true;
+    }
     ret = remoteConnectSource< T1, T2 >( source_host_arr[ish], d_source_arr[ish], n_source_arr[ish],
 					 d_target, n_target, group_local_id, conn_spec, syn_spec );
 
