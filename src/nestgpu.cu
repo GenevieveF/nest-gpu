@@ -620,6 +620,7 @@ NESTGPU::EndSimulation()
     std::cout << HostIdStr() << "  InsertHostGroupSourceNode_time: " << conn_->InsertHostGroupSourceNode_time_ << "\n";
     std::cout << HostIdStr() << "  RemoteConnectSource_time: " << conn_->RemoteConnectSource_time_ << "\n";
     std::cout << HostIdStr() << "  ConnectRemoteConnectSource_time: " << conn_->ConnectRemoteConnectSource_time_ << "\n";
+    std::cout << HostIdStr() << "  ConnectRemoteConnectTarget_time: " << conn_->ConnectRemoteConnectTarget_time_ << "\n";
     std::cout << HostIdStr() << "  SetUsedSourceNodes_time: " << conn_->SetUsedSourceNodes_time_ << "\n";
     std::cout << HostIdStr() << "  CountUsedSourceNodes_time: " << conn_->CountUsedSourceNodes_time_ << "\n";
     std::cout << HostIdStr() << "  AllocUsedSourceNodes_time: " << conn_->AllocUsedSourceNodes_time_ << "\n";
@@ -627,7 +628,8 @@ NESTGPU::EndSimulation()
     std::cout << HostIdStr() << "  SortUsedSourceNodeIndex_time: " << conn_->SortUsedSourceNodeIndex_time_ << "\n";
     std::cout << HostIdStr() << "  AllocNodeToMap_time: " << conn_->AllocNodeToMap_time_ << "\n";
     std::cout << HostIdStr() << "  SearchNodeIndexNotInMap_time: " << conn_->SearchNodeIndexNotInMap_time_ << "\n";
-    std::cout << HostIdStr() << "  AllocRemoteSourceNodeMapBlocks_time: " << conn_->AllocRemoteSourceNodeMapBlocks_time_ << "\n";
+    std::cout << HostIdStr() << "  AllocLocalSourceNodeMapBlocks_time: " << conn_->AllocLocalSourceNodeMapBlocks_time_ << "\n";
+        std::cout << HostIdStr() << "  AllocRemoteSourceNodeMapBlocks_time: " << conn_->AllocRemoteSourceNodeMapBlocks_time_ << "\n";
     std::cout << HostIdStr() << "  InsertNodesInMap_time: " << conn_->InsertNodesInMap_time_ << "\n";
     std::cout << HostIdStr() << "  SortSourceImageNodeMap_time: " << conn_->SortSourceImageNodeMap_time_ << "\n";
     std::cout << HostIdStr() << "  SetLocalNodeIndex_time: " << conn_->SetLocalNodeIndex_time_ << "\n";
@@ -2492,3 +2494,24 @@ NESTGPU::RemoteCreate( int i_host, std::string model_name, inode_t n_nodes /*=1*
 int NESTGPU::CreateHostGroup(int *host_arr, int n_hosts) {
   return conn_->CreateHostGroup(host_arr, n_hosts, mpi_flag_);
 }
+
+bool isSequence(inode_t)
+{
+  return true;
+}
+
+bool isSequence(inode_t*)
+{
+  return false;
+}
+
+inode_t firstNodeIndex(inode_t node)
+{
+  return node;
+}
+
+inode_t firstNodeIndex(inode_t*)
+{
+  throw ngpu_exception( "firsNodeIndex function can be used only with node sequences" );
+}
+

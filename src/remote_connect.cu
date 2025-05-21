@@ -202,11 +202,14 @@ searchNodeIndexInMapKernel( uint** node_map,
 // flags nodes not yet mapped and counts them
 __global__ void
 searchNodeIndexNotInMapKernel( uint** node_map,
-  uint n_node_map,
-  uint* sorted_node_index,
-  bool* node_to_map,
-  uint* n_node_to_map,
-  uint n_node )
+			       uint n_node_map,
+			       uint* sorted_node_index,
+			       bool* node_to_map,
+			       uint* n_node_to_map,
+			       uint n_node,
+			       uint** image_node_map,
+			       uint *mapped_local_node_index
+			       )
 {
   uint i_node = threadIdx.x + blockIdx.x * blockDim.x;
   if ( i_node >= n_node )
@@ -229,6 +232,9 @@ searchNodeIndexNotInMapKernel( uint** node_map,
       node_to_map[ i_node ] = true;
       atomicAdd( n_node_to_map, 1 );
     }
+    else if (image_node_map != nullptr) {
+      mapped_local_node_index[ i_node ] = image_node_map[i_block][i_in_block];
+    }
   }
 }
 
@@ -238,18 +244,26 @@ searchNodeIndexNotInMapKernel( uint** node_map,
 // to local nodes from n_nodes to n_nodes + n_node_to_map
 __global__ void
 insertNodesInMapKernel( uint** node_map,
-  uint** image_node_map,
-  uint image_node_map_i0,
-  uint old_n_node_map,
-  uint* sorted_node_index,
-  bool* node_to_map,
-  uint* i_node_to_map,
-  uint n_node )
+			uint old_n_node_map,
+			uint* sorted_node_index,
+			bool* node_to_map,
+			uint* i_node_to_map,
+			uint n_node,
+			uint** image_node_map,
+			uint image_node_map_i0,
+			uint* i_sorted_arr,
+			uint* local_node_index,
+			uint *mapped_local_node_index)
 {
   uint i_node = threadIdx.x + blockIdx.x * blockDim.x;
   // if thread is out of range or node is already mapped, return
-  if ( i_node >= n_node || !node_to_map[ i_node ] )
+  if ( i_node >= n_node)
   {
+    return;
+  }
+  if ( image_node_map != nullptr  && !node_to_map[ i_node ] )
+  {
+    local_node_index[ i_sorted_arr[ i_node ] ] = mapped_local_node_index[ i_node ];
     return;
   }
   // node has to be inserted in the map
@@ -262,6 +276,7 @@ insertNodesInMapKernel( uint** node_map,
   if ( image_node_map != nullptr )
   {
     image_node_map[ i_block ][ i ] = image_node_map_i0 + pos;
+    local_node_index[i_sorted_arr[i_node]] = image_node_map_i0 + pos;
   }
 }
 

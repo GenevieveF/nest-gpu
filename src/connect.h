@@ -67,6 +67,7 @@ public:
   double InsertHostGroupSourceNode_time_;
   double RemoteConnectSource_time_;
   double ConnectRemoteConnectSource_time_;
+  double ConnectRemoteConnectTarget_time_;
   double SetUsedSourceNodes_time_;
   double CountUsedSourceNodes_time_;
   double AllocUsedSourceNodes_time_;
@@ -75,6 +76,7 @@ public:
   double AllocNodeToMap_time_;
   double SearchNodeIndexNotInMap_time_;
   double AllocRemoteSourceNodeMapBlocks_time_;
+  double AllocLocalSourceNodeMapBlocks_time_;
   double InsertNodesInMap_time_;
   double SortSourceImageNodeMap_time_;
   double SetLocalNodeIndex_time_;
@@ -400,6 +402,7 @@ public:
       InsertHostGroupSourceNode_time_ = 0;
       RemoteConnectSource_time_ = 0;
       ConnectRemoteConnectSource_time_ = 0;
+      ConnectRemoteConnectTarget_time_ = 0;
       SetUsedSourceNodes_time_ = 0;
       CountUsedSourceNodes_time_ = 0;
       AllocUsedSourceNodes_time_ = 0;
@@ -408,6 +411,7 @@ public:
       AllocNodeToMap_time_ = 0;
       SearchNodeIndexNotInMap_time_ = 0;
       AllocRemoteSourceNodeMapBlocks_time_ = 0;
+      AllocLocalSourceNodeMapBlocks_time_ = 0;
       InsertNodesInMap_time_ = 0;
       SortSourceImageNodeMap_time_ = 0;
       SetLocalNodeIndex_time_ = 0;
@@ -4502,5 +4506,13 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::resetConnectionSpikeTimeDown()
   return 0;
 }
 
+
+bool isSequence(inode_t);
+
+bool isSequence(inode_t*);
+
+inode_t firstNodeIndex(inode_t node);
+
+inode_t firstNodeIndex(inode_t*);
 
 #endif // CONNECT_H

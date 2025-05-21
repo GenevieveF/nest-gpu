@@ -1416,4 +1416,55 @@ repack( ArrayT* h_subarray, uint k, position_t* part_size, char* d_buffer, posit
   }
 }
 
+// Find number of elements < val in a sorted block array of size array_size
+// starting from position pos0
+template<class T>
+int64_t search_block_array_down(T** array, int64_t array_size, int64_t block_size, T val, int64_t pos0=0)
+{
+  int ib0 = (int)(pos0 / block_size);
+  int ib1 = (int)((array_size - 1) / block_size);
+  
+  int64_t n_down = array_size; // this is the result if the loop on the blocks reaches the end without break
+
+  // loop on blocks
+  for (int ib=ib0; ib<=ib1; ib++) {
+    T first_val_in_block; // first value in the block
+    T last_val_in_block;  // last value in the block
+    // index of first element in the block
+    int64_t i0 = (ib == ib0) ? (pos0 % block_size) : 0;
+    gpuErrchk(cudaMemcpy( &first_val_in_block, &array[ib][i0], sizeof(T), cudaMemcpyDeviceToHost ) );
+    if (first_val_in_block >= val) {
+      n_down = ib*block_size + i0;
+      break;
+    }
+    // index of last element in the block
+    int64_t i1 = (ib == ib1) ? ((array_size - 1) % block_size) : (block_size - 1);
+    gpuErrchk(cudaMemcpy( &last_val_in_block, &array[ib][i1], sizeof(T), cudaMemcpyDeviceToHost ) );
+    if (last_val_in_block == val) {
+      n_down = ib*block_size + i1;
+      break;
+    }
+    else if (val < last_val_in_block) {
+      // search the value in the block
+      int64_t *d_position;
+      CUDAMALLOCCTRL( "&d_position", &d_position, sizeof(int64_t) );     
+
+      // Find number of elements < val in the sorted (map) array
+      search_down< T, 1024 > <<< 1, 1024 >>>(array[ib] + i0, i1 - i0 + 1, val, d_position);
+      DBGCUDASYNC;
+      // Copy position from GPU to CPU memory
+      int64_t h_position;
+      gpuErrchk( cudaMemcpy( &h_position, d_position, sizeof( uint ), cudaMemcpyDeviceToHost ) );
+      n_down = ib*block_size + i0 + h_position;
+      // check if found
+      if (n_down < pos0 || n_down > array_size) {
+	throw ngpu_exception( "Inconsistent position in search_block_array_down" );
+      }
+      break;
+    }
+  }
+  
+  return n_down;
+}
+
 #endif
