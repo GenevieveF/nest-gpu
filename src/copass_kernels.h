@@ -1454,10 +1454,12 @@ int64_t search_block_array_down(T** array, int64_t array_size, int64_t block_siz
       DBGCUDASYNC;
       // Copy position from GPU to CPU memory
       int64_t h_position;
-      gpuErrchk( cudaMemcpy( &h_position, d_position, sizeof( uint ), cudaMemcpyDeviceToHost ) );
+      gpuErrchk( cudaMemcpy( &h_position, d_position, sizeof( int64_t ), cudaMemcpyDeviceToHost ) );
       n_down = ib*block_size + i0 + h_position;
       // check if found
       if (n_down < pos0 || n_down > array_size) {
+	printf("ib: %d\tblock_size: %ld\ti0: %ld\th_position: %ld\tn_down: %ld\n",
+	       ib, block_size, i0, h_position, n_down);
 	throw ngpu_exception( "Inconsistent position in search_block_array_down" );
       }
       break;

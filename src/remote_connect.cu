@@ -47,6 +47,45 @@ __device__ uint*** local_source_node_map;
 
 __constant__ uint n_local_nodes; // number of local nodes
 
+
+// kernel that copies part of a block array to an array
+__global__ void
+copyBlockArrayToArrayKernel( uint* array, uint **block_array, uint block_size, uint i0,
+			     uint n_elem)
+{
+  uint i_array = threadIdx.x + blockIdx.x * blockDim.x;
+  if ( i_array >= n_elem ) {
+    return;
+  }
+
+  uint i_block_array = i0 + i_array;
+  int i_block = (int)(i_block_array / block_size);
+  uint i_in_block = i_block_array % block_size;
+  //printf("ok0 i_array: %d, i0: %d, i_block_array: %d, i_block: %d, i_in_block; %d\n",
+  //i_array, i0, i_block_array, i_block, i_in_block);
+  array[i_array] = block_array[i_block][i_in_block];
+  //printf("ok1 i_array: %d, i0: %d, i_block_array: %d, i_block: %d, i_in_block; %d\n",
+  //	 i_array, i0, i_block_array, i_block, i_in_block);
+
+}
+
+// kernel that copies an array to part of a block array
+__global__ void
+copyArrayToBlockArrayKernel( uint **block_array, uint* array, uint block_size, uint i0,
+			     uint n_elem)
+{
+  uint i_array = threadIdx.x + blockIdx.x * blockDim.x;
+  if ( i_array >= n_elem ) {
+    return;
+  }
+
+  uint i_block_array = i0 + i_array;
+  int i_block = (int)(i_block_array / block_size);
+  uint i_in_block = i_block_array % block_size;
+  block_array[i_block][i_in_block] = array[i_array]; 
+}
+
+
 // kernel that flags source nodes used in at least one new connection
 // of a given block
 __global__ void
@@ -279,6 +318,97 @@ insertNodesInMapKernel( uint** node_map,
     local_node_index[i_sorted_arr[i_node]] = image_node_map_i0 + pos;
   }
 }
+
+
+
+
+
+// Kernel that extracts local image index from already mapped remote source nodes
+// and match it to the nodes in a sequence
+__global__ void extractLocalImageIndexOfMappedSourceNodes(
+							  uint** node_map,
+							  uint** image_node_map,
+							  uint* local_node_index,
+							  uint i_node_map_0,
+							  uint n_elem,
+							  uint i_node_0
+							  )
+{
+  uint i_elem = threadIdx.x + blockIdx.x * blockDim.x;
+  // if thread is out of range return
+  if ( i_elem >= n_elem)
+  {
+    return;
+  }
+  uint i_node_map = i_node_map_0 + i_elem;
+  uint i_block = i_node_map / node_map_block_size;
+  uint i = i_node_map % node_map_block_size;
+
+  uint i_node_rel = node_map[ i_block ][ i ] - i_node_0;
+  local_node_index[i_node_rel] = image_node_map[ i_block ][ i ];
+}
+
+
+// Kernel that maps remote source nodes in a sequence to local images
+// checking if nodes are already in map
+// Unmapped remote source nodes must be mapped
+// to local nodes from n_nodes to n_nodes + n_node_to_map
+__global__ void
+mapRemoteSourceNodesToLocalImagesKernel(
+					uint** node_map,
+					//uint old_n_node_map,
+					//uint* sorted_node_index,
+					bool* node_to_map,
+					uint* i_node_to_map,
+					uint n_node,
+					uint** image_node_map,
+					uint image_node_map_i0,
+					//uint* i_sorted_arr,
+					uint* local_node_index,
+					//uint *mapped_local_node_index,
+					uint i_node_map_0,
+					uint i_node_0
+					)
+{
+  uint i_node = threadIdx.x + blockIdx.x * blockDim.x;
+  // if thread is out of range return
+  if ( i_node >= n_node)
+  {
+    return;
+  }
+  uint i_node_map = i_node_map_0 + i_node;
+  uint i_block = i_node_map / node_map_block_size;
+  uint i = i_node_map % node_map_block_size;
+  node_map[ i_block ][ i ] = i_node_0 + i_node;
+  
+  if ( node_to_map[ i_node ] ) { // node has to be mapped
+    // get and atomically increase index of node to be mapped
+    uint pos = atomicAdd( i_node_to_map, 1 );
+    image_node_map[ i_block ][ i ] = image_node_map_i0 + pos;
+  }
+  else { // node was already mapped
+    image_node_map[ i_block ][ i ] = local_node_index[ i_node ];
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 // Only for debugging P2P MPI spike communication
 __global__ void

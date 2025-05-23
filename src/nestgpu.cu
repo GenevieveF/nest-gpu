@@ -97,6 +97,7 @@ enum KernelBoolParamIndexes
   i_print_time,
   i_remove_conn_key,
   i_remote_spike_mul,
+  i_check_node_maps,
   N_KERNEL_BOOL_PARAM
 };
 
@@ -121,9 +122,12 @@ const std::string kernel_int_param_name[ N_KERNEL_INT_PARAM ] = { "rnd_seed",
   "conn_struct_type",
   "spike_buffer_algo" };
 
-const std::string kernel_bool_param_name[ N_KERNEL_BOOL_PARAM ] = { "print_time",
+const std::string kernel_bool_param_name[ N_KERNEL_BOOL_PARAM ] = {
+  "print_time",
   "remove_conn_key",
-  "remote_spike_mul" };
+  "remote_spike_mul",
+  "check_node_maps"
+};
 
 int
 NESTGPU::setNHosts( int n_hosts )
@@ -163,6 +167,7 @@ NESTGPU::NESTGPU()
   CURAND_CALL( curandSetPseudoRandomGeneratorSeed( *random_generator_, kernel_seed_ + this_host_ ) );
 
   conn_ = nullptr;
+  check_node_maps_ = false;
   // by default, connection structure type used is the 12-byte type
   setConnStructType( i_conn12b );
   // setConnStructType( i_conn16b );
@@ -202,7 +207,7 @@ NESTGPU::NESTGPU()
   remote_spike_mul_ = false;
 
   nested_loop_algo_ = CumulSumNestedLoopAlgo;
-
+  
   SpikeBufferUpdate_time_ = 0;
   poisson_generator_time_ = 0;
   neuron_Update_time_ = 0;
@@ -347,6 +352,7 @@ NESTGPU::setConnStructType( int conn_struct_type )
   conn_->setStartRealTime( start_real_time_ );
 
   conn_->InitTimers();
+  conn_->check_node_maps_ = check_node_maps_;
   
   return 0;
 }
@@ -2203,6 +2209,8 @@ NESTGPU::GetBoolParam( std::string param_name )
     return remove_conn_key_;
   case i_remote_spike_mul:
     return remote_spike_mul_;
+  case i_check_node_maps:
+    return check_node_maps_;
   default:
     throw ngpu_exception( std::string( "Unrecognized kernel boolean parameter " ) + param_name );
   }
@@ -2223,6 +2231,10 @@ NESTGPU::SetBoolParam( std::string param_name, bool val )
     break;
   case i_remote_spike_mul:
     remote_spike_mul_ = val;
+    break;
+  case i_check_node_maps:
+    check_node_maps_ = val;
+    conn_->check_node_maps_ = val;
     break;
   default:
     throw ngpu_exception( std::string( "Unrecognized kernel boolean parameter " ) + param_name );

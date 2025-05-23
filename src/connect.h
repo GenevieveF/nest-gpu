@@ -81,6 +81,7 @@ public:
   double SortSourceImageNodeMap_time_;
   double SetLocalNodeIndex_time_;
   double FixConnectionSourceNodeIndexes_time_;
+  bool check_node_maps_;
 
   virtual ~Connection() {}; // destructor
 

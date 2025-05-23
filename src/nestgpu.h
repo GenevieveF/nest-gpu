@@ -229,6 +229,8 @@ class NESTGPU
 
   int spike_buffer_algo_;
 
+  bool check_node_maps_;
+
   std::vector< int > ext_neuron_input_spike_node_;
 
   std::vector< int > ext_neuron_input_spike_port_;
@@ -330,6 +332,13 @@ public:
   SetPrintTime( bool print_time )
   {
     print_time_ = print_time;
+    return 0;
+  }
+
+  inline int
+  SetCheckNodeMaps( bool check_node_maps )
+  {
+    check_node_maps_ = check_node_maps;
     return 0;
   }
 
