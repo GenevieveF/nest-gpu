@@ -64,7 +64,8 @@ __global__ void extractLocalImageIndexOfMappedSourceNodes(
 							  uint* local_node_index,
 							  uint i_node_map_0,
 							  uint n_elem,
-							  uint i_node_0
+							  uint i_node_0,
+							  bool* node_mapped
 							  );
 
 // Kernel that maps remote source nodes in a sequence to local images
@@ -76,7 +77,7 @@ mapRemoteSourceNodesToLocalImagesKernel(
 					uint** node_map,
 					//uint old_n_node_map,
 					//uint* sorted_node_index,
-					bool* node_to_map,
+					bool* node_mapped,
 					uint* i_node_to_map,
 					uint n_node,
 					uint** image_node_map,
@@ -534,9 +535,12 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::fixConnectionSourceNodeIndexes( int
     }
 
     if (n_block_conn > 0) {
+      // std::cout << "ok0 fCSNIK " << this_host_ << " ib: " << ib << " n_block_conn: " << n_block_conn << " i_conn0: " << i_conn0 << " d_local_node_index: "
+      //	<< (unsigned long long) d_local_node_index << std::endl;
       fixConnectionSourceNodeIndexesKernel< ConnKeyT > <<< ( n_block_conn + 1023 ) / 1024, 1024 >>>
 	(conn_key_vect_[ ib ] + i_conn0, n_block_conn, d_local_node_index );
       CUDASYNC;
+      // std::cout << "ok1 fCSNIK " << this_host_ << std::endl;
     }
     
   }
@@ -1202,8 +1206,11 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectSource( int source_hos
   uint** d_node_map = nullptr;
   uint** d_image_node_map = nullptr;
 
-  // Boolean array for flagging remote source nodes not yet mapped
+  // Boolean array for flagging remote source nodes not yet mapped across nodes used in some connection
   bool* d_node_to_map = nullptr;
+  
+  // Boolean array for flagging remote source nodes already mapped across all source nodes
+  bool* d_node_mapped = nullptr;
 
   // Number of nodes to be mapped
   uint* d_n_node_to_map = nullptr;
@@ -1252,8 +1259,6 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectSource( int source_hos
     return 0;
   }
 
-  
-  
   // check if the connection rule or number of connections is such that all remote source nodes should actually be used
   if ( !conn_spec.use_all_remote_source_nodes_) {
     // on both the source and target hosts create a temporary array
@@ -1295,7 +1300,225 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectSource( int source_hos
   }
 
 
-  //if (true) { //(controllare_se_non_e_una_sequenza) {
+  int gi_host;
+  //if ( group_local_id <= 1 ) { // point-to-point communication (0)  NOT FOR NOW and world group (1) include all hosts
+  if ( group_local_id == 0 ) { // point-to-point communication (0) include all hosts
+    gi_host = source_host;
+  }
+  else {
+    // find the source host index in the host group
+    auto it = std::find(host_group_[group_local_id].begin(), host_group_[group_local_id].end(), source_host);
+    if (it == host_group_[group_local_id].end()) {
+      throw ngpu_exception( "source host not found in host group" );
+    }
+    gi_host = it - host_group_[group_local_id].begin();
+  }
+  uint n_blocks = h_remote_source_node_map_[group_local_id][ gi_host ].size();
+  // get current number of elements in the map
+  uint n_node_map;
+  gpuErrchk(
+    cudaMemcpy( &n_node_map, &d_n_remote_source_node_map_[group_local_id][ gi_host ], sizeof( uint ), cudaMemcpyDeviceToHost ) );
+
+  
+  if ( n_blocks > 0 )
+  {
+    // check for consistency between number of elements
+    // and number of blocks in the map
+    uint tmp_n_blocks = ( n_node_map - 1 ) / node_map_block_size_ + 1;
+    if ( tmp_n_blocks != n_blocks )
+    {
+      std::cerr << "Inconsistent number of elements " << n_node_map << " and number of blocks " << n_blocks
+      		  << " in remote_source_node_map on host " << this_host_ << std::endl;
+      std::cout << "group_local_id" << group_local_id << "\n";
+      std::cout << "gi_host" << gi_host << "\n";
+      
+      //exit( -1 );
+      throw ngpu_exception( "Error" );
+    }
+  }
+
+
+  uint i0;
+  uint i1;
+  uint transl = 0;
+  uint n_down_0 = 0;
+  uint n_down_1 = 0;
+  uint new_n_node_map = 0;
+  uint h_n_node_to_map = 0;
+  
+  // The following section is used only if the source nodes are defined by a sequence and if the connection rule prescribe that they are all used
+  if (!check_node_maps_ && isSequence(source) && conn_spec.use_all_remote_source_nodes_) {
+    std::cout << "Updating remote node maps on host " << this_host_ << std::endl;
+    // if source nodes are defined by a sequence, find the first and last index of the sequence
+    inode_t i_source_0 = firstNodeIndex(source);
+    // std::cout << "okb2 RCS " << this_host_ << " i_source_0: " << i_source_0 << std::endl;
+    inode_t i_source_1 = i_source_0 + n_source - 1;
+    // std::cout << "okb3 RCS " << this_host_ << " i_source_1: " << i_source_1 << std::endl;
+
+    // std::cout << "okb4 RCS " << this_host_ << " n_node_map: " << n_node_map << std::endl;
+
+    uint n_mapped = 0;
+    
+    if (n_node_map > 0) {
+      // Find number of elements < i_source_0 in the map
+      n_down_0 = search_block_array_down<inode_t>(&h_remote_source_node_map_[group_local_id][ gi_host ][0],
+						  n_node_map, node_map_block_size_, i_source_0);
+      // std::cout  << "okb5 RCS " << this_host_ << " n_down_0: " << n_down_0 << std::endl;
+      
+      // Find number of elements < i_source_1 + 1 in the map
+      n_down_1 = search_block_array_down<inode_t>(&h_remote_source_node_map_[group_local_id][ gi_host ][0],
+						  n_node_map, node_map_block_size_, i_source_1 + 1, n_down_0);
+      // std::cout  << "okb6 RCS " << this_host_ << " n_down_1: " << n_down_1 << std::endl;
+      // Compute number of source nodes already mapped
+      n_mapped = n_down_1 - n_down_0;
+    }
+    // std::cout  << "okb7 RCS " <<  this_host_ << " n_mapped: " << n_mapped << std::endl;
+    // Compute number of source nodes that must be mapped
+    h_n_node_to_map = n_used_source_nodes - n_mapped;
+    // std::cout << "okb8 RCS " << this_host_ << " h_n_node_to_map: " << h_n_node_to_map << std::endl;
+
+    //if (n_node_map > 0 && check_to_be_mapped > 0) {
+    //uint aux_size = node_map_block_size_;
+    //i1 = n_node_map - 1;
+    //i0 = n_down_1;
+    //transl = check_to_be_mapped;
+
+    new_n_node_map = n_node_map + h_n_node_to_map;
+    // printf("okb10 RCS %d new_n_node_map: %d, n_node_map: %d, transl: %d\n", this_host_, new_n_node_map, n_node_map, transl);
+    if (new_n_node_map > 0) {
+      uint new_n_blocks = (new_n_node_map - 1) / node_map_block_size_ + 1;
+      //printf("%d new_n_blocks: %d, n_blocks: %d\n", this_host_, new_n_blocks, n_blocks);
+
+      // if new blocks are required for the map, allocate them
+      if ( new_n_blocks != n_blocks ) {
+	// Allocate GPU memory for new remote-source-node-map blocks
+	time_mark = getRealTime();
+	allocRemoteSourceNodeMapBlocks(
+				       h_remote_source_node_map_[group_local_id][gi_host], h_image_node_map_[group_local_id][gi_host], new_n_blocks );
+	AllocRemoteSourceNodeMapBlocks_time_ += (getRealTime() - time_mark);
+      }
+      
+      // allocate d_node_map and get it from host
+      CUDAMALLOCCTRL( "&d_node_map", &d_node_map, new_n_blocks * sizeof( uint* ) );
+      gpuErrchk( cudaMemcpy( d_node_map, &h_remote_source_node_map_[group_local_id][ gi_host ][0], new_n_blocks * sizeof( uint* ),
+			     cudaMemcpyHostToDevice ) );
+      // allocate d_check_image_node_map and get it from host
+
+      CUDAMALLOCCTRL( "&d_image_node_map", &d_image_node_map, new_n_blocks * sizeof( uint* ) );
+      gpuErrchk( cudaMemcpy( d_image_node_map, &h_image_node_map_[group_local_id][ gi_host ][0], new_n_blocks * sizeof( uint* ), cudaMemcpyHostToDevice ) );
+    }
+
+    if (n_node_map > 0 && h_n_node_to_map > 0) {
+      uint aux_size = node_map_block_size_;
+      i1 = n_node_map - 1;
+      i0 = n_down_1;
+      transl = h_n_node_to_map;
+
+      CUDAMALLOCCTRL( "&d_aux_array", &d_aux_array, aux_size * sizeof( uint ) );
+      
+      CUDAMALLOCCTRL( "&d_aux_array", &d_aux_array, aux_size * sizeof( uint ) );
+
+      //printf("n_node_map: %d, new_n_node_map: %d, transl: %d, node_map_block_size: %d, aux_size: %d, i0: %d, i1: %d\n",
+      //     n_node_map, new_n_node_map, transl, node_map_block_size_, aux_size, i0, i1);
+      
+      int64_t i_right = i1;
+      while (i_right >= i0) {
+	// check that i_right + 1 - aux_size > i0 (considering that i_right is unsigned); if yes, set i_left = i_right + 1 - aux_size
+	// otherwise set i_left = i0
+	int64_t i_left = max(i_right + 1 - aux_size, (int64_t)i0);
+	int64_t n_elem = i_right - i_left + 1;
+	//printf("i_left: %ld, i_right: %ld, n_elem: %ld\n", i_left, i_right, n_elem);
+	if (n_elem > 0) {
+	  copyBlockArrayToArrayKernel<<< ( n_elem + 1023 ) / 1024, 1024 >>>
+	    (d_aux_array, d_node_map, node_map_block_size_, i_left, n_elem);
+	  CUDASYNC;
+	  copyArrayToBlockArrayKernel<<< ( n_elem + 1023 ) / 1024, 1024 >>>
+	    (d_node_map, d_aux_array, node_map_block_size_, i_left + transl, n_elem);
+	  CUDASYNC;
+	  copyBlockArrayToArrayKernel<<< ( n_elem + 1023 ) / 1024, 1024 >>>
+	    (d_aux_array, d_image_node_map, node_map_block_size_, i_left, n_elem);
+	  CUDASYNC;
+	  copyArrayToBlockArrayKernel<<< ( n_elem + 1023 ) / 1024, 1024 >>>
+	    (d_image_node_map, d_aux_array, node_map_block_size_, i_left + transl, n_elem);
+	  CUDASYNC;
+	}
+	i_right -= aux_size;
+      }
+    }
+
+    // std::cout << "ok0 RCS " << this_host_ << " new_n_node_map: " << new_n_node_map << std::endl;
+    if (new_n_node_map > 0) {
+      // std::cout << "ok00 RCS " << this_host_ << " new_n_node_map: " << new_n_node_map << std::endl;
+      // Allocate the index of the nodes to be mapped and initialize it to 0
+      CUDAMALLOCCTRL( "&d_i_node_to_map", &d_i_node_to_map, sizeof( uint ) );
+      gpuErrchk( cudaMemset( d_i_node_to_map, 0, sizeof( uint ) ) );
+
+      // on the target hosts create a temporary array of integers having size
+      // equal to the number of source nodes
+      CUDAMALLOCCTRL( "&d_local_node_index", &d_local_node_index, n_source * sizeof( uint ) );
+      // std::cout << "ok1 RCS " << this_host_ << " d_local_node_index: " << d_local_node_index << std::endl;
+      
+      // Allocate boolean array for flagging remote source nodes already mapped
+      // and initialize all elements to 0 (false)
+      CUDAMALLOCCTRL( "&d_node_mapped", &d_node_mapped, n_source * sizeof( bool ) );
+      gpuErrchk( cudaMemset( d_node_mapped, 0, n_source * sizeof( bool ) ) );
+
+      // Launch Kernel that extracts local image index from already mapped remote source nodes
+      // and match it to the nodes in a sequence
+      if (n_mapped > 0) {
+	extractLocalImageIndexOfMappedSourceNodes<<< ( n_mapped + 1023 ) / 1024, 1024 >>>(
+											  d_node_map,
+											  d_image_node_map,
+											  d_local_node_index,
+											  n_down_0,
+											  n_mapped,
+											  i_source_0,
+											  d_node_mapped
+											  );
+	
+	CUDASYNC;
+      }
+
+      if (n_source > 0) {
+	mapRemoteSourceNodesToLocalImagesKernel<<< ( n_source + 1023 ) / 1024, 1024 >>>(
+											d_node_map,
+											d_node_mapped,
+											d_i_node_to_map,
+											n_source,
+											d_image_node_map,
+											image_node_map_i0,
+											d_local_node_index,
+											n_down_0,
+											i_source_0
+											);
+	CUDASYNC;
+      }
+
+      CUDAFREECTRL( "d_i_node_to_map", d_i_node_to_map );
+      d_i_node_to_map = nullptr;
+      //CUDAFREECTRL( "d_local_node_index", d_local_node_index );
+
+      // update number of elements in remote source node map
+      n_node_map = new_n_node_map;
+      gpuErrchk(cudaMemcpy( &d_n_remote_source_node_map_[group_local_id][gi_host], &n_node_map, sizeof( uint ), cudaMemcpyHostToDevice ) );
+    
+      // check for consistency between number of elements
+      // and number of blocks in the map
+      n_blocks = h_remote_source_node_map_[group_local_id][ gi_host ].size();
+      uint tmp_n_blocks = ( n_node_map - 1 ) / node_map_block_size_ + 1;
+      if ( tmp_n_blocks != n_blocks ) {
+	std::cerr << "Inconsistent number of elements " << n_node_map << " and number of blocks " << n_blocks
+		  << " in remote_source_node_map on host " << this_host_ << std::endl;
+	//exit( -1 );
+	throw ngpu_exception( "Error" );
+      }
+
+    }
+    std::cout << "Finished udating remote node maps on host " << this_host_ << std::endl;
+    // std::cout << "ok2 RCS " << this_host_ << " d_local_node_index: " << d_local_node_index << std::endl;
+  }
+  else {
+    // std::cout << "ok3 RCS " << this_host_ << " d_local_node_index: " << d_local_node_index << std::endl;
     // Allocate arrays of size n_used_source_nodes
     time_mark = getRealTime();
 
@@ -1356,202 +1579,268 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectSource( int source_hos
     //
   
 
-  DBGCUDASYNC;
-  int gi_host;
-  //if ( group_local_id <= 1 ) { // point-to-point communication (0)  NOT FOR NOW and world group (1) include all hosts
-  if ( group_local_id == 0 ) { // point-to-point communication (0) include all hosts
-    gi_host = source_host;
-  }
-  else {
-    // find the source host index in the host group
-    auto it = std::find(host_group_[group_local_id].begin(), host_group_[group_local_id].end(), source_host);
-    if (it == host_group_[group_local_id].end()) {
-      throw ngpu_exception( "source host not found in host group" );
-    }
-    gi_host = it - host_group_[group_local_id].begin();
-  }
-  uint n_blocks = h_remote_source_node_map_[group_local_id][ gi_host ].size();
-  // get current number of elements in the map
-  uint n_node_map;
-  gpuErrchk(
-    cudaMemcpy( &n_node_map, &d_n_remote_source_node_map_[group_local_id][ gi_host ], sizeof( uint ), cudaMemcpyDeviceToHost ) );
+    DBGCUDASYNC;
 
-  
-  if ( n_blocks > 0 )
-  {
-    // check for consistency between number of elements
-    // and number of blocks in the map
-    uint tmp_n_blocks = ( n_node_map - 1 ) / node_map_block_size_ + 1;
-    if ( tmp_n_blocks != n_blocks )
-    {
-      std::cerr << "Inconsistent number of elements " << n_node_map << " and number of blocks " << n_blocks
-                << " in remote_source_node_map\n";
-      std::cout << "group_local_id" << group_local_id << "\n";
-      std::cout << "gi_host" << gi_host << "\n";
+    if ( n_blocks > 0 ) {    
+      CUDAMALLOCCTRL( "&d_node_map", &d_node_map, n_blocks * sizeof( uint* ) );
+      gpuErrchk( cudaMemcpy( d_node_map,
+			     &h_remote_source_node_map_[group_local_id][gi_host][ 0 ],
+			     n_blocks * sizeof( uint* ),
+			     cudaMemcpyHostToDevice ) );
       
-      //exit( -1 );
-      throw ngpu_exception( "Error" );
+      // allocate d_image_node_map and get it from host
+      CUDAMALLOCCTRL( "&d_image_node_map", &d_image_node_map, n_blocks * sizeof( uint* ) );
+      gpuErrchk( cudaMemcpy( d_image_node_map,
+			     &h_image_node_map_[group_local_id][gi_host][ 0 ],
+			     n_blocks * sizeof( uint* ),
+			     cudaMemcpyHostToDevice ) );
     }
-    CUDAMALLOCCTRL( "&d_node_map", &d_node_map, n_blocks * sizeof( uint* ) );
-    gpuErrchk( cudaMemcpy( d_node_map,
-      &h_remote_source_node_map_[group_local_id][gi_host][ 0 ],
-      n_blocks * sizeof( uint* ),
-      cudaMemcpyHostToDevice ) );
-  }
-  
-  time_mark = getRealTime();
-  // Allocate boolean array for flagging remote source nodes not yet mapped
-  // and initialize all elements to 0 (false)
-  CUDAMALLOCCTRL( "&d_node_to_map", &d_node_to_map, n_used_source_nodes * sizeof( bool ) );
-  gpuErrchk( cudaMemset( d_node_to_map, 0, n_used_source_nodes * sizeof( bool ) ) );
 
-  // Allocate number of nodes to be mapped and initialize it to 0
-  CUDAMALLOCCTRL( "&d_n_node_to_map", &d_n_node_to_map, sizeof( uint ) );
-  gpuErrchk( cudaMemset( d_n_node_to_map, 0, sizeof( uint ) ) );
-  // Allocate array of indexes of already mapped nodes local image indexes
-  CUDAMALLOCCTRL( "&d_mapped_local_node_index", &d_mapped_local_node_index, n_used_source_nodes * sizeof( uint ) );
-  AllocNodeToMap_time_ += (getRealTime() - time_mark);
 
-  if ( n_blocks > 0 )
-  {
-    // allocate d_image_node_map and get it from host
-    CUDAMALLOCCTRL( "&d_image_node_map", &d_image_node_map, n_blocks * sizeof( uint* ) );
-    gpuErrchk( cudaMemcpy( d_image_node_map,
-      &h_image_node_map_[group_local_id][gi_host][ 0 ],
-      n_blocks * sizeof( uint* ),
-      cudaMemcpyHostToDevice ) );
-  }
-  // launch kernel that searches remote source nodes indexes not in the map,
-  // flags the nodes not yet mapped and counts them
-  if (n_used_source_nodes > 0) {
-    time_mark = getRealTime();
-    searchNodeIndexNotInMapKernel<<< ( n_used_source_nodes + 1023 ) / 1024, 1024 >>>
-      (d_node_map, n_node_map, d_sorted_source_node_index, d_node_to_map, d_n_node_to_map, n_used_source_nodes,
-       d_image_node_map, d_mapped_local_node_index);
-    CUDASYNC;
-    SearchNodeIndexNotInMap_time_ += (getRealTime() - time_mark);
-  }
-  
-  uint h_n_node_to_map;
 
-  gpuErrchk( cudaMemcpy( &h_n_node_to_map, d_n_node_to_map, sizeof( uint ), cudaMemcpyDeviceToHost ) );
-  
-  uint i0;
-  uint i1;
-  uint transl = 0;
-  uint n_down_0 = 0;
-  uint n_down_1 = 0;
-  uint new_n_node_map = 0;
-  
-  // The following section is used only in special runs for checking maps
-  if (check_node_maps_ && isSequence(source) && conn_spec.use_all_remote_source_nodes_) {
-    std::cout << "Preparing check of remote node maps on host " << this_host_ << std::endl;
-    // if source nodes are defined by a sequence, find the first and last index of the sequence
-    inode_t i_source_0 = firstNodeIndex(source);
-    //std::cout << this_host_ << " i_source_0: " << i_source_0 << std::endl;
-    inode_t i_source_1 = i_source_0 + n_source - 1;
-    //std::cout << this_host_ << " i_source_1: " << i_source_1 << std::endl;
 
-    //std::cout << this_host_ << " n_node_map: " << n_node_map << std::endl;
-
-    uint check_n_mapped = 0;
     
-    if (n_node_map > 0) {
-      // Find number of elements < i_source_0 in the map
-      n_down_0 = search_block_array_down<inode_t>(&h_remote_source_node_map_[group_local_id][ gi_host ][0],
-							  n_node_map, node_map_block_size_, i_source_0);
-      //std::cout << this_host_ << " n_down_0: " << n_down_0 << std::endl;
+    time_mark = getRealTime();
+    // Allocate boolean array for flagging remote source nodes not yet mapped
+    // and initialize all elements to 0 (false)
+    CUDAMALLOCCTRL( "&d_node_to_map", &d_node_to_map, n_used_source_nodes * sizeof( bool ) );
+    gpuErrchk( cudaMemset( d_node_to_map, 0, n_used_source_nodes * sizeof( bool ) ) );
+
+    // Allocate number of nodes to be mapped and initialize it to 0
+    CUDAMALLOCCTRL( "&d_n_node_to_map", &d_n_node_to_map, sizeof( uint ) );
+    gpuErrchk( cudaMemset( d_n_node_to_map, 0, sizeof( uint ) ) );
+    // Allocate array of indexes of already mapped nodes local image indexes
+    CUDAMALLOCCTRL( "&d_mapped_local_node_index", &d_mapped_local_node_index, n_used_source_nodes * sizeof( uint ) );
+    AllocNodeToMap_time_ += (getRealTime() - time_mark);
+
+    // launch kernel that searches remote source nodes indexes not in the map,
+    // flags the nodes not yet mapped and counts them
+    if (n_used_source_nodes > 0) {
+      time_mark = getRealTime();
+      searchNodeIndexNotInMapKernel<<< ( n_used_source_nodes + 1023 ) / 1024, 1024 >>>
+	(d_node_map, n_node_map, d_sorted_source_node_index, d_node_to_map, d_n_node_to_map, n_used_source_nodes,
+	 d_image_node_map, d_mapped_local_node_index);
+      CUDASYNC;
+      SearchNodeIndexNotInMap_time_ += (getRealTime() - time_mark);
+    }
+  
+    gpuErrchk( cudaMemcpy( &h_n_node_to_map, d_n_node_to_map, sizeof( uint ), cudaMemcpyDeviceToHost ) );
+  
+    // The following section is used only in special runs for checking maps
+    if (check_node_maps_ && isSequence(source) && conn_spec.use_all_remote_source_nodes_) {
+      std::cout << "Preparing check of remote node maps on host " << this_host_ << std::endl;
+      // if source nodes are defined by a sequence, find the first and last index of the sequence
+      inode_t i_source_0 = firstNodeIndex(source);
+      //std::cout << this_host_ << " i_source_0: " << i_source_0 << std::endl;
+      inode_t i_source_1 = i_source_0 + n_source - 1;
+      //std::cout << this_host_ << " i_source_1: " << i_source_1 << std::endl;
+
+      //std::cout << this_host_ << " n_node_map: " << n_node_map << std::endl;
+
+      uint check_n_mapped = 0;
+    
+      if (n_node_map > 0) {
+	// Find number of elements < i_source_0 in the map
+	n_down_0 = search_block_array_down<inode_t>(&h_remote_source_node_map_[group_local_id][ gi_host ][0],
+						    n_node_map, node_map_block_size_, i_source_0);
+	//std::cout << this_host_ << " n_down_0: " << n_down_0 << std::endl;
       
-      // Find number of elements < i_source_1 + 1 in the map
-      n_down_1 = search_block_array_down<inode_t>(&h_remote_source_node_map_[group_local_id][ gi_host ][0],
-							  n_node_map, node_map_block_size_, i_source_1 + 1, n_down_0);
-      //std::cout << this_host_ << " n_down_1: " << n_down_1 << std::endl;
-      // Compute number of source nodes already mapped
-      check_n_mapped = n_down_1 - n_down_0;
-    }
-    //std::cout <<  this_host_ << " check n_mapped: " << check_n_mapped << std::endl;
-    // Compute number of source nodes that must be mapped
-    uint check_to_be_mapped = n_used_source_nodes - check_n_mapped;
-    //std::cout << this_host_ << " check to_be_mapped: " << check_to_be_mapped << std::endl;
-    //std::cout << this_host_ << " to_be_mapped: " << h_n_node_to_map << std::endl; 
-    if (check_to_be_mapped != h_n_node_to_map) {
-      throw ngpu_exception( "Error in computing n. of nodes to be mapped" );
-    }
+	// Find number of elements < i_source_1 + 1 in the map
+	n_down_1 = search_block_array_down<inode_t>(&h_remote_source_node_map_[group_local_id][ gi_host ][0],
+						    n_node_map, node_map_block_size_, i_source_1 + 1, n_down_0);
+	//std::cout << this_host_ << " n_down_1: " << n_down_1 << std::endl;
+	// Compute number of source nodes already mapped
+	check_n_mapped = n_down_1 - n_down_0;
+      }
+      //std::cout <<  this_host_ << " check n_mapped: " << check_n_mapped << std::endl;
+      // Compute number of source nodes that must be mapped
+      uint check_to_be_mapped = n_used_source_nodes - check_n_mapped;
+      //std::cout << this_host_ << " check to_be_mapped: " << check_to_be_mapped << std::endl;
+      //std::cout << this_host_ << " to_be_mapped: " << h_n_node_to_map << std::endl; 
+      if (check_to_be_mapped != h_n_node_to_map) {
+	throw ngpu_exception( "Error in computing n. of nodes to be mapped" );
+      }
 
-    //if (n_node_map > 0 && check_to_be_mapped > 0) {
-    //uint aux_size = node_map_block_size_;
-    //i1 = n_node_map - 1;
-    //i0 = n_down_1;
-    //transl = check_to_be_mapped;
+      //if (n_node_map > 0 && check_to_be_mapped > 0) {
+      //uint aux_size = node_map_block_size_;
+      //i1 = n_node_map - 1;
+      //i0 = n_down_1;
+      //transl = check_to_be_mapped;
 
-    new_n_node_map = n_node_map + transl;
-    //printf("%d new_n_node_map: %d, n_node_map: %d, transl: %d\n", this_host_, new_n_node_map, n_node_map, transl);
-    if (new_n_node_map > 0) {
-      int new_n_blocks = (int)(((int64_t)new_n_node_map - 1) / node_map_block_size_ + 1);
-      //printf("%d new_n_blocks: %d, n_blocks: %d\n", this_host_, new_n_blocks, n_blocks);
+      new_n_node_map = n_node_map + transl;
+      //printf("%d new_n_node_map: %d, n_node_map: %d, transl: %d\n", this_host_, new_n_node_map, n_node_map, transl);
+      if (new_n_node_map > 0) {
+	int new_n_blocks = (int)(((int64_t)new_n_node_map - 1) / node_map_block_size_ + 1);
+	//printf("%d new_n_blocks: %d, n_blocks: %d\n", this_host_, new_n_blocks, n_blocks);
 
-      h_check_node_map = new uint*[new_n_blocks];
-      h_check_image_node_map = new uint*[new_n_blocks];
-      for (uint ib=0; ib<(uint)new_n_blocks; ib++) {
-	CUDAMALLOCCTRL( "h_check_node_map", &h_check_node_map[ib], node_map_block_size_ * sizeof( uint ) );
-	CUDAMALLOCCTRL( "h_check_image_node_map", &h_check_image_node_map[ib], node_map_block_size_ * sizeof( uint ) );
-	if (ib < n_blocks) {
-	  gpuErrchk( cudaMemcpy( h_check_node_map[ib], h_remote_source_node_map_[group_local_id][ gi_host ][ib],
-				 node_map_block_size_ * sizeof( uint ), cudaMemcpyDeviceToDevice ) );
-	  gpuErrchk( cudaMemcpy( h_check_image_node_map[ib], h_image_node_map_[group_local_id][ gi_host ][ib],
-				 node_map_block_size_ * sizeof( uint ), cudaMemcpyDeviceToDevice ) );
-	}
+	h_check_node_map = new uint*[new_n_blocks];
+	h_check_image_node_map = new uint*[new_n_blocks];
+	for (uint ib=0; ib<(uint)new_n_blocks; ib++) {
+	  CUDAMALLOCCTRL( "h_check_node_map", &h_check_node_map[ib], node_map_block_size_ * sizeof( uint ) );
+	  CUDAMALLOCCTRL( "h_check_image_node_map", &h_check_image_node_map[ib], node_map_block_size_ * sizeof( uint ) );
+	  if (ib < n_blocks) {
+	    gpuErrchk( cudaMemcpy( h_check_node_map[ib], h_remote_source_node_map_[group_local_id][ gi_host ][ib],
+				   node_map_block_size_ * sizeof( uint ), cudaMemcpyDeviceToDevice ) );
+	    gpuErrchk( cudaMemcpy( h_check_image_node_map[ib], h_image_node_map_[group_local_id][ gi_host ][ib],
+				   node_map_block_size_ * sizeof( uint ), cudaMemcpyDeviceToDevice ) );
+	  }
 
 	
+	}
+	// allocate d_check_node_map and get it from host
+	CUDAMALLOCCTRL( "&d_check_node_map", &d_check_node_map, new_n_blocks * sizeof( uint* ) );
+	gpuErrchk( cudaMemcpy( d_check_node_map, h_check_node_map, new_n_blocks * sizeof( uint* ), cudaMemcpyHostToDevice ) );
+	// allocate d_check_image_node_map and get it from host
+
+	CUDAMALLOCCTRL( "&d_check_image_node_map", &d_check_image_node_map, new_n_blocks * sizeof( uint* ) );
+	gpuErrchk( cudaMemcpy( d_check_image_node_map, h_check_image_node_map, new_n_blocks * sizeof( uint* ), cudaMemcpyHostToDevice ) );
       }
-      // allocate d_check_node_map and get it from host
-      CUDAMALLOCCTRL( "&d_check_node_map", &d_check_node_map, new_n_blocks * sizeof( uint* ) );
-      gpuErrchk( cudaMemcpy( d_check_node_map, h_check_node_map, new_n_blocks * sizeof( uint* ), cudaMemcpyHostToDevice ) );
-      // allocate d_check_image_node_map and get it from host
 
-      CUDAMALLOCCTRL( "&d_check_image_node_map", &d_check_image_node_map, new_n_blocks * sizeof( uint* ) );
-      gpuErrchk( cudaMemcpy( d_check_image_node_map, h_check_image_node_map, new_n_blocks * sizeof( uint* ), cudaMemcpyHostToDevice ) );
-    }
+      if (n_node_map > 0 && check_to_be_mapped > 0) {
+	uint aux_size = node_map_block_size_;
+	i1 = n_node_map - 1;
+	i0 = n_down_1;
+	transl = check_to_be_mapped;
 
-    if (n_node_map > 0 && check_to_be_mapped > 0) {
-      uint aux_size = node_map_block_size_;
-      i1 = n_node_map - 1;
-      i0 = n_down_1;
-      transl = check_to_be_mapped;
-
-      CUDAMALLOCCTRL( "&d_aux_array", &d_aux_array, aux_size * sizeof( uint ) );
+	CUDAMALLOCCTRL( "&d_aux_array", &d_aux_array, aux_size * sizeof( uint ) );
       
-      CUDAMALLOCCTRL( "&d_aux_array", &d_aux_array, aux_size * sizeof( uint ) );
+	CUDAMALLOCCTRL( "&d_aux_array", &d_aux_array, aux_size * sizeof( uint ) );
 
-      //printf("n_node_map: %d, new_n_node_map: %d, transl: %d, node_map_block_size: %d, aux_size: %d, i0: %d, i1: %d\n",
-      //     n_node_map, new_n_node_map, transl, node_map_block_size_, aux_size, i0, i1);
+	//printf("n_node_map: %d, new_n_node_map: %d, transl: %d, node_map_block_size: %d, aux_size: %d, i0: %d, i1: %d\n",
+	//     n_node_map, new_n_node_map, transl, node_map_block_size_, aux_size, i0, i1);
       
-      int64_t i_right = i1;
-      while (i_right >= i0) {
-	// check that i_right + 1 - aux_size > i0 (considering that i_right is unsigned); if yes, set i_left = i_right + 1 - aux_size
-	// otherwise set i_left = i0
-	int64_t i_left = max(i_right + 1 - aux_size, (int64_t)i0);
-	int64_t n_elem = i_right - i_left + 1;
-	//printf("i_left: %ld, i_right: %ld, n_elem: %ld\n", i_left, i_right, n_elem);
-	if (n_elem > 0) {
-	  copyBlockArrayToArrayKernel<<< ( n_elem + 1023 ) / 1024, 1024 >>>
-	    (d_aux_array, d_check_node_map, node_map_block_size_, i_left, n_elem);
-	  CUDASYNC;
-	  copyArrayToBlockArrayKernel<<< ( n_elem + 1023 ) / 1024, 1024 >>>
-	    (d_check_node_map, d_aux_array, node_map_block_size_, i_left + transl, n_elem);
-	  CUDASYNC;
-	  copyBlockArrayToArrayKernel<<< ( n_elem + 1023 ) / 1024, 1024 >>>
-	    (d_aux_array, d_check_image_node_map, node_map_block_size_, i_left, n_elem);
-	  CUDASYNC;
-	  copyArrayToBlockArrayKernel<<< ( n_elem + 1023 ) / 1024, 1024 >>>
-	    (d_check_image_node_map, d_aux_array, node_map_block_size_, i_left + transl, n_elem);
+	int64_t i_right = i1;
+	while (i_right >= i0) {
+	  // check that i_right + 1 - aux_size > i0 (considering that i_right is unsigned); if yes, set i_left = i_right + 1 - aux_size
+	  // otherwise set i_left = i0
+	  int64_t i_left = max(i_right + 1 - aux_size, (int64_t)i0);
+	  int64_t n_elem = i_right - i_left + 1;
+	  //printf("i_left: %ld, i_right: %ld, n_elem: %ld\n", i_left, i_right, n_elem);
+	  if (n_elem > 0) {
+	    copyBlockArrayToArrayKernel<<< ( n_elem + 1023 ) / 1024, 1024 >>>
+	      (d_aux_array, d_check_node_map, node_map_block_size_, i_left, n_elem);
+	    CUDASYNC;
+	    copyArrayToBlockArrayKernel<<< ( n_elem + 1023 ) / 1024, 1024 >>>
+	      (d_check_node_map, d_aux_array, node_map_block_size_, i_left + transl, n_elem);
+	    CUDASYNC;
+	    copyBlockArrayToArrayKernel<<< ( n_elem + 1023 ) / 1024, 1024 >>>
+	      (d_aux_array, d_check_image_node_map, node_map_block_size_, i_left, n_elem);
+	    CUDASYNC;
+	    copyArrayToBlockArrayKernel<<< ( n_elem + 1023 ) / 1024, 1024 >>>
+	      (d_check_image_node_map, d_aux_array, node_map_block_size_, i_left + transl, n_elem);
+	    CUDASYNC;
+	  }
+	  i_right -= aux_size;
+	}
+      }
+    
+      if (new_n_node_map > 0) {    
+	// Allocate the index of the nodes to be mapped and initialize it to 0
+	CUDAMALLOCCTRL( "&d_i_node_to_map", &d_i_node_to_map, sizeof( uint ) );
+	gpuErrchk( cudaMemset( d_i_node_to_map, 0, sizeof( uint ) ) );
+
+	// on the target hosts create a temporary array of integers having size
+	// equal to the number of source nodes
+	CUDAMALLOCCTRL( "&d_local_node_index", &d_local_node_index, n_source * sizeof( uint ) );
+
+	// Allocate boolean array for flagging remote source nodes already mapped
+	// and initialize all elements to 0 (false)
+	CUDAMALLOCCTRL( "&d_node_mapped", &d_node_mapped, n_source * sizeof( bool ) );
+	gpuErrchk( cudaMemset( d_node_mapped, 0, n_source * sizeof( bool ) ) );
+
+	// Launch Kernel that extracts local image index from already mapped remote source nodes
+	// and match it to the nodes in a sequence
+	if (check_n_mapped > 0) {
+	  extractLocalImageIndexOfMappedSourceNodes<<< ( check_n_mapped + 1023 ) / 1024, 1024 >>>(
+												  d_check_node_map,
+												  d_check_image_node_map,
+												  d_local_node_index,
+												  n_down_0,
+												  check_n_mapped,
+												  i_source_0,
+												  d_node_mapped
+												  );
+	
 	  CUDASYNC;
 	}
-	i_right -= aux_size;
+
+	if (n_source > 0) {
+	  mapRemoteSourceNodesToLocalImagesKernel<<< ( n_source + 1023 ) / 1024, 1024 >>>(
+											  d_check_node_map,
+											  d_node_mapped,
+											  d_i_node_to_map,
+											  n_source,
+											  d_check_image_node_map,
+											  image_node_map_i0,
+											  d_local_node_index,
+											  n_down_0,
+											  i_source_0
+											  );
+	  CUDASYNC;
+	}
+
+	CUDAFREECTRL( "d_i_node_to_map", d_i_node_to_map );
+	d_i_node_to_map = nullptr;
+	CUDAFREECTRL( "d_local_node_index", d_local_node_index );
+	d_local_node_index = nullptr;
+
+
+      }
+      std::cout << "Finished preparing check of remote node maps on host " << this_host_ << std::endl;
+    }
+  
+    ////////////////////////////////////////////
+
+    uint new_n_blocks = 0;
+    if (h_n_node_to_map > 0) {
+      // Check if new blocks are required for the map
+      new_n_blocks = ( n_node_map + h_n_node_to_map - 1 ) / node_map_block_size_ + 1;
+      //std::cout << "ok0 " << this_host_ << " n_node_map: " << n_node_map << " h_n_node_to_map: " << h_n_node_to_map << " n_blocks: " << n_blocks
+      //		<< " new_n_blocks: " <<  new_n_blocks << std::endl;
+
+    
+      // if new blocks are required for the map, allocate them
+      if ( new_n_blocks != n_blocks ) {
+	// Allocate GPU memory for new remote-source-node-map blocks
+	time_mark = getRealTime();
+	allocRemoteSourceNodeMapBlocks(
+				       h_remote_source_node_map_[group_local_id][gi_host], h_image_node_map_[group_local_id][gi_host], new_n_blocks );
+	AllocRemoteSourceNodeMapBlocks_time_ += (getRealTime() - time_mark);
+	// free d_node_map
+	if ( d_node_map != nullptr )
+	  {
+	    CUDAFREECTRL( "d_node_map", d_node_map );
+	    d_node_map = nullptr;
+	  }
+	// update number of blocks in the map
+	n_blocks = new_n_blocks;
+
+	// reallocate d_node_map and get it from host
+	CUDAMALLOCCTRL( "&d_node_map", &d_node_map, n_blocks * sizeof( uint* ) );
+	gpuErrchk( cudaMemcpy( d_node_map,
+			       &h_remote_source_node_map_[group_local_id][gi_host][ 0 ],
+			       n_blocks * sizeof( uint* ),
+			       cudaMemcpyHostToDevice ) );
       }
     }
-    
-    if (new_n_node_map > 0) {    
+    if ( n_blocks > 0 ) {
+      if (d_image_node_map != nullptr) {
+	CUDAFREECTRL( "d_image_node_map", d_image_node_map );
+	d_image_node_map = nullptr;
+      }
+      // allocate d_image_node_map and get it from host
+      CUDAMALLOCCTRL( "&d_image_node_map", &d_image_node_map, n_blocks * sizeof( uint* ) );
+      gpuErrchk( cudaMemcpy( d_image_node_map,
+			     &h_image_node_map_[group_local_id][gi_host][ 0 ],
+			     n_blocks * sizeof( uint* ),
+			     cudaMemcpyHostToDevice ) );
+
+  
+      // Map the not-yet-mapped source nodes using a kernel
+      // similar to the one used for counting
+      // In the target host unmapped remote source nodes must be mapped
+      // to local nodes from n_nodes to n_nodes + n_node_to_map
+
       // Allocate the index of the nodes to be mapped and initialize it to 0
       CUDAMALLOCCTRL( "&d_i_node_to_map", &d_i_node_to_map, sizeof( uint ) );
       gpuErrchk( cudaMemset( d_i_node_to_map, 0, sizeof( uint ) ) );
@@ -1560,181 +1849,90 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectSource( int source_hos
       // equal to the number of source nodes
       CUDAMALLOCCTRL( "&d_local_node_index", &d_local_node_index, n_source * sizeof( uint ) );
 
+      // launch kernel that checks if nodes are already in map
+      // if not insert them in the map
+      // In the target host, put in the map the pair:
+      // (source_node_index, image_node_map_i0 + i_node_to_map)
 
-      // Launch Kernel that extracts local image index from already mapped remote source nodes
-      // and match it to the nodes in a sequence
-      if (check_n_mapped > 0) {
-	extractLocalImageIndexOfMappedSourceNodes<<< ( check_n_mapped + 1023 ) / 1024, 1024 >>>(
-												d_check_node_map,
-												d_check_image_node_map,
-												d_local_node_index,
-												n_down_0,
-												check_n_mapped,
-												i_source_0
-												);
-	
+      if (n_used_source_nodes > 0) {
+	time_mark = getRealTime();
+	insertNodesInMapKernel<<< ( n_used_source_nodes + 1023 ) / 1024, 1024 >>>
+	  ( d_node_map,
+	    n_node_map,
+	    d_sorted_source_node_index,
+	    d_node_to_map,
+	    d_i_node_to_map,
+	    n_used_source_nodes,
+	    d_image_node_map,
+	    image_node_map_i0,
+	    d_i_sorted_source_arr,
+	    d_local_node_index,
+	    d_mapped_local_node_index);
 	CUDASYNC;
+	InsertNodesInMap_time_ += (getRealTime() - time_mark);
+      }
+    }
+    
+    // update number of elements in remote source node map
+    n_node_map += h_n_node_to_map;
+    gpuErrchk(
+	      cudaMemcpy( &d_n_remote_source_node_map_[group_local_id][gi_host], &n_node_map, sizeof( uint ), cudaMemcpyHostToDevice ) );
+    
+    // check for consistency between number of elements
+    // and number of blocks in the map
+    uint tmp_n_blocks = ( n_node_map - 1 ) / node_map_block_size_ + 1;
+    if ( tmp_n_blocks != n_blocks )
+      {
+	std::cerr << "Inconsistent number of elements " << n_node_map << " and number of blocks " << n_blocks
+		  << " in remote_source_node_map on host " << this_host_ << std::endl;
+	//exit( -1 );
+	throw ngpu_exception( "Error" );
+    }
+
+    if (h_n_node_to_map > 0) {
+      // Sort the WHOLE key-value pair map source_node_map, image_node_map
+      // using block sort algorithm copass_sort
+      // typical usage:
+      // copass_sort::sort<uint, value_struct>(key_subarray, value_subarray, n,
+      //				       aux_size, d_storage, storage_bytes);
+      // Determine temporary storage requirements for copass_sort
+      time_mark = getRealTime();
+      int64_t storage_bytes = 0;
+      if (d_storage != nullptr) {
+	CUDAFREECTRL( "d_storage", d_storage );
+	d_storage = nullptr;
       }
 
-      if (n_source > 0) {
-	mapRemoteSourceNodesToLocalImagesKernel<<< ( n_source + 1023 ) / 1024, 1024 >>>(
-											d_check_node_map,
-											d_node_to_map,
-											d_i_node_to_map,
-											n_source,
-											d_check_image_node_map,
-											image_node_map_i0,
-											d_local_node_index,
-											n_down_0,
-											i_source_0
-											);
-	CUDASYNC;
-      }
+      copass_sort::sort< uint, uint >
+	( &h_remote_source_node_map_[group_local_id][gi_host][ 0 ],
+	  &h_image_node_map_[group_local_id][gi_host][ 0 ],
+	  n_node_map,
+	  node_map_block_size_,
+	  d_storage,
+	  storage_bytes,
+	  0 );
 
-      CUDAFREECTRL( "d_i_node_to_map", d_i_node_to_map );
-      CUDAFREECTRL( "d_local_node_index", d_local_node_index );
+      // Allocate temporary storage
+      CUDAMALLOCCTRL( "&d_storage", &d_storage, storage_bytes );
 
-
+      // Run sorting operation
+      copass_sort::sort< uint, uint >
+	( &h_remote_source_node_map_[group_local_id][gi_host][ 0 ],
+	  &h_image_node_map_[group_local_id][gi_host][ 0 ],
+	  n_node_map,
+	  node_map_block_size_,
+	  d_storage,
+	  storage_bytes,
+	  0 );
+      CUDAFREECTRL( "d_storage", d_storage );
+      d_storage = nullptr;
+  
+      SortSourceImageNodeMap_time_ += (getRealTime() - time_mark);
     }
-    std::cout << "Finished preparing check of remote node maps on host " << this_host_ << std::endl;
+    // std::cout << "ok4 RCS " << this_host_ << std::endl;
   }
+  // std::cout << "ok5 RCS " << this_host_ << " d_local_node_index: " << d_local_node_index << std::endl;
   
-  ////////////////////////////////////////////
-  
-  // Check if new blocks are required for the map
-  uint new_n_blocks = ( n_node_map + h_n_node_to_map - 1 ) / node_map_block_size_ + 1;
-
-  // if new blocks are required for the map, allocate them
-  if ( new_n_blocks != n_blocks )
-  {
-    // Allocate GPU memory for new remote-source-node-map blocks
-    time_mark = getRealTime();
-    allocRemoteSourceNodeMapBlocks(
-      h_remote_source_node_map_[group_local_id][gi_host], h_image_node_map_[group_local_id][gi_host], new_n_blocks );
-    AllocRemoteSourceNodeMapBlocks_time_ += (getRealTime() - time_mark);
-    // free d_node_map
-    if ( d_node_map != nullptr )
-    {
-      CUDAFREECTRL( "d_node_map", d_node_map );
-      d_node_map = nullptr;
-    }
-    // update number of blocks in the map
-    n_blocks = new_n_blocks;
-
-    // reallocate d_node_map and get it from host
-    CUDAMALLOCCTRL( "&d_node_map", &d_node_map, n_blocks * sizeof( uint* ) );
-    gpuErrchk( cudaMemcpy( d_node_map,
-      &h_remote_source_node_map_[group_local_id][gi_host][ 0 ],
-      n_blocks * sizeof( uint* ),
-      cudaMemcpyHostToDevice ) );
-  }
-  if ( n_blocks > 0 )
-  {
-    if (d_image_node_map != nullptr) {
-	CUDAFREECTRL( "d_image_node_map", d_image_node_map );
-	d_image_node_map = nullptr;
-    }
-    // allocate d_image_node_map and get it from host
-    CUDAMALLOCCTRL( "&d_image_node_map", &d_image_node_map, n_blocks * sizeof( uint* ) );
-    gpuErrchk( cudaMemcpy( d_image_node_map,
-      &h_image_node_map_[group_local_id][gi_host][ 0 ],
-      n_blocks * sizeof( uint* ),
-      cudaMemcpyHostToDevice ) );
-  }
-  
-  // Map the not-yet-mapped source nodes using a kernel
-  // similar to the one used for counting
-  // In the target host unmapped remote source nodes must be mapped
-  // to local nodes from n_nodes to n_nodes + n_node_to_map
-
-  // Allocate the index of the nodes to be mapped and initialize it to 0
-  CUDAMALLOCCTRL( "&d_i_node_to_map", &d_i_node_to_map, sizeof( uint ) );
-  gpuErrchk( cudaMemset( d_i_node_to_map, 0, sizeof( uint ) ) );
-
-  // on the target hosts create a temporary array of integers having size
-  // equal to the number of source nodes
-  CUDAMALLOCCTRL( "&d_local_node_index", &d_local_node_index, n_source * sizeof( uint ) );
-
-  // launch kernel that checks if nodes are already in map
-  // if not insert them in the map
-  // In the target host, put in the map the pair:
-  // (source_node_index, image_node_map_i0 + i_node_to_map)
-
-  if (n_used_source_nodes > 0) {
-    time_mark = getRealTime();
-    insertNodesInMapKernel<<< ( n_used_source_nodes + 1023 ) / 1024, 1024 >>>
-      ( d_node_map,
-	n_node_map,
-	d_sorted_source_node_index,
-	d_node_to_map,
-	d_i_node_to_map,
-	n_used_source_nodes,
-	d_image_node_map,
-	image_node_map_i0,
-	d_i_sorted_source_arr,
-	d_local_node_index,
-	d_mapped_local_node_index);
-    CUDASYNC;
-    InsertNodesInMap_time_ += (getRealTime() - time_mark);
-  }
-  
-
-  // update number of elements in remote source node map
-  n_node_map += h_n_node_to_map;
-  gpuErrchk(
-    cudaMemcpy( &d_n_remote_source_node_map_[group_local_id][gi_host], &n_node_map, sizeof( uint ), cudaMemcpyHostToDevice ) );
-
-  // check for consistency between number of elements
-  // and number of blocks in the map
-  uint tmp_n_blocks = ( n_node_map - 1 ) / node_map_block_size_ + 1;
-  if ( tmp_n_blocks != n_blocks )
-  {
-    std::cerr << "Inconsistent number of elements " << n_node_map << " and number of blocks " << n_blocks
-              << " in remote_source_node_map\n";
-    //exit( -1 );
-    throw ngpu_exception( "Error" );
-  }
-  
-  // Sort the WHOLE key-value pair map source_node_map, image_node_map
-  // using block sort algorithm copass_sort
-  // typical usage:
-  // copass_sort::sort<uint, value_struct>(key_subarray, value_subarray, n,
-  //				       aux_size, d_storage, storage_bytes);
-  // Determine temporary storage requirements for copass_sort
-  time_mark = getRealTime();
-  int64_t storage_bytes = 0;
-  if (d_storage != nullptr) {
-    CUDAFREECTRL( "d_storage", d_storage );
-    d_storage = nullptr;
-  }
-
-  copass_sort::sort< uint, uint >
-    ( &h_remote_source_node_map_[group_local_id][gi_host][ 0 ],
-      &h_image_node_map_[group_local_id][gi_host][ 0 ],
-      n_node_map,
-      node_map_block_size_,
-      d_storage,
-      storage_bytes,
-      0 );
-
-  // Allocate temporary storage
-  CUDAMALLOCCTRL( "&d_storage", &d_storage, storage_bytes );
-
-  // Run sorting operation
-  copass_sort::sort< uint, uint >
-    ( &h_remote_source_node_map_[group_local_id][gi_host][ 0 ],
-      &h_image_node_map_[group_local_id][gi_host][ 0 ],
-      n_node_map,
-      node_map_block_size_,
-      d_storage,
-      storage_bytes,
-      0 );
-  CUDAFREECTRL( "d_storage", d_storage );
-  d_storage = nullptr;
-  
-  SortSourceImageNodeMap_time_ += (getRealTime() - time_mark);
-
-
   // The following block is used only for testing
   if (check_node_maps_) {
     std::cout << "Started checking extraction of local node indexees from remote node maps on host " << this_host_ << std::endl;
@@ -1779,8 +1977,6 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectSource( int source_hos
   }
 
   //////////////////////////// 
-  
-  
   // On target host. Loop on all new connections and replace
   // the source node index source_node[i_conn] with the value of the element
   // pointed by the index itself in the array local_node_index
@@ -1797,8 +1993,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectSource( int source_hos
     
   // On target host. Create n_nodes_to_map nodes of type image_node
   // std::cout << "h_n_node_to_map " << h_n_node_to_map <<"\n";
-  if ( h_n_node_to_map > 0 )
-  {
+  if ( h_n_node_to_map > 0 ) {
     //_Create("image_node", h_n_node_to_map);
     n_image_nodes_ += h_n_node_to_map;
     // std::cout << "n_image_nodes_ " << n_image_nodes_ <<"\n";
@@ -1926,6 +2121,10 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectSource( int source_hos
 
   if (d_node_to_map != nullptr) {
     CUDAFREECTRL( "d_node_to_map", d_node_to_map );
+  }
+
+  if (d_node_mapped != nullptr) {
+    CUDAFREECTRL( "d_node_mapped", d_node_mapped );
   }
 
   if (d_n_node_to_map != nullptr) {

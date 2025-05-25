@@ -331,7 +331,8 @@ __global__ void extractLocalImageIndexOfMappedSourceNodes(
 							  uint* local_node_index,
 							  uint i_node_map_0,
 							  uint n_elem,
-							  uint i_node_0
+							  uint i_node_0,
+							  bool *node_mapped
 							  )
 {
   uint i_elem = threadIdx.x + blockIdx.x * blockDim.x;
@@ -346,6 +347,7 @@ __global__ void extractLocalImageIndexOfMappedSourceNodes(
 
   uint i_node_rel = node_map[ i_block ][ i ] - i_node_0;
   local_node_index[i_node_rel] = image_node_map[ i_block ][ i ];
+  node_mapped[i_node_rel] = true;
 }
 
 
@@ -358,7 +360,7 @@ mapRemoteSourceNodesToLocalImagesKernel(
 					uint** node_map,
 					//uint old_n_node_map,
 					//uint* sorted_node_index,
-					bool* node_to_map,
+					bool* node_mapped,
 					uint* i_node_to_map,
 					uint n_node,
 					uint** image_node_map,
@@ -381,10 +383,11 @@ mapRemoteSourceNodesToLocalImagesKernel(
   uint i = i_node_map % node_map_block_size;
   node_map[ i_block ][ i ] = i_node_0 + i_node;
   
-  if ( node_to_map[ i_node ] ) { // node has to be mapped
+  if ( !node_mapped[ i_node ] ) { // node has to be mapped
     // get and atomically increase index of node to be mapped
     uint pos = atomicAdd( i_node_to_map, 1 );
     image_node_map[ i_block ][ i ] = image_node_map_i0 + pos;
+    local_node_index[ i_node ] = image_node_map_i0 + pos;
   }
   else { // node was already mapped
     image_node_map[ i_block ][ i ] = local_node_index[ i_node ];
