@@ -61,10 +61,10 @@ copyBlockArrayToArrayKernel( uint* array, uint **block_array, uint block_size, u
   uint i_block_array = i0 + i_array;
   int i_block = (int)(i_block_array / block_size);
   uint i_in_block = i_block_array % block_size;
-  //printf("ok0 i_array: %d, i0: %d, i_block_array: %d, i_block: %d, i_in_block; %d\n",
+  //printf("i_array: %d, i0: %d, i_block_array: %d, i_block: %d, i_in_block; %d\n",
   //i_array, i0, i_block_array, i_block, i_in_block);
   array[i_array] = block_array[i_block][i_in_block];
-  //printf("ok1 i_array: %d, i0: %d, i_block_array: %d, i_block: %d, i_in_block; %d\n",
+  //printf("i_array: %d, i0: %d, i_block_array: %d, i_block: %d, i_in_block; %d\n",
   //	 i_array, i0, i_block_array, i_block, i_in_block);
 
 }
@@ -305,17 +305,18 @@ insertNodesInMapKernel( uint** node_map,
     local_node_index[ i_sorted_arr[ i_node ] ] = mapped_local_node_index[ i_node ];
     return;
   }
-  // node has to be inserted in the map
-  // get and atomically increase index of node to be mapped
-  uint pos = atomicAdd( i_node_to_map, 1 );
-  uint i_node_map = old_n_node_map + pos;
-  uint i_block = i_node_map / node_map_block_size;
-  uint i = i_node_map % node_map_block_size;
-  node_map[ i_block ][ i ] = sorted_node_index[ i_node ];
-  if ( image_node_map != nullptr )
-  {
-    image_node_map[ i_block ][ i ] = image_node_map_i0 + pos;
-    local_node_index[i_sorted_arr[i_node]] = image_node_map_i0 + pos;
+  if ( node_to_map[ i_node ] ) {
+    // node has to be inserted in the map
+    // get and atomically increase index of node to be mapped
+    uint pos = atomicAdd( i_node_to_map, 1 );
+    uint i_node_map = old_n_node_map + pos;
+    uint i_block = i_node_map / node_map_block_size;
+    uint i = i_node_map % node_map_block_size;
+    node_map[ i_block ][ i ] = sorted_node_index[ i_node ];
+    if ( image_node_map != nullptr ) {
+      image_node_map[ i_block ][ i ] = image_node_map_i0 + pos;
+      local_node_index[i_sorted_arr[i_node]] = image_node_map_i0 + pos;
+    }
   }
 }
 
@@ -327,12 +328,12 @@ insertNodesInMapKernel( uint** node_map,
 // and match it to the nodes in a sequence
 __global__ void extractLocalImageIndexOfMappedSourceNodes(
 							  uint** node_map,
-							  uint** image_node_map,
-							  uint* local_node_index,
 							  uint i_node_map_0,
 							  uint n_elem,
 							  uint i_node_0,
-							  bool *node_mapped
+							  bool *node_mapped,
+							  uint** image_node_map,
+							  uint* local_node_index
 							  )
 {
   uint i_elem = threadIdx.x + blockIdx.x * blockDim.x;
@@ -346,8 +347,10 @@ __global__ void extractLocalImageIndexOfMappedSourceNodes(
   uint i = i_node_map % node_map_block_size;
 
   uint i_node_rel = node_map[ i_block ][ i ] - i_node_0;
-  local_node_index[i_node_rel] = image_node_map[ i_block ][ i ];
   node_mapped[i_node_rel] = true;
+  if (image_node_map != nullptr) {
+    local_node_index[i_node_rel] = image_node_map[ i_block ][ i ];
+  }
 }
 
 
@@ -358,18 +361,14 @@ __global__ void extractLocalImageIndexOfMappedSourceNodes(
 __global__ void
 mapRemoteSourceNodesToLocalImagesKernel(
 					uint** node_map,
-					//uint old_n_node_map,
-					//uint* sorted_node_index,
 					bool* node_mapped,
-					uint* i_node_to_map,
 					uint n_node,
+					uint i_node_map_0,
+					uint i_node_0,
 					uint** image_node_map,
 					uint image_node_map_i0,
-					//uint* i_sorted_arr,
-					uint* local_node_index,
-					//uint *mapped_local_node_index,
-					uint i_node_map_0,
-					uint i_node_0
+					uint* i_node_to_map,
+					uint* local_node_index
 					)
 {
   uint i_node = threadIdx.x + blockIdx.x * blockDim.x;
@@ -382,15 +381,17 @@ mapRemoteSourceNodesToLocalImagesKernel(
   uint i_block = i_node_map / node_map_block_size;
   uint i = i_node_map % node_map_block_size;
   node_map[ i_block ][ i ] = i_node_0 + i_node;
-  
-  if ( !node_mapped[ i_node ] ) { // node has to be mapped
-    // get and atomically increase index of node to be mapped
-    uint pos = atomicAdd( i_node_to_map, 1 );
-    image_node_map[ i_block ][ i ] = image_node_map_i0 + pos;
-    local_node_index[ i_node ] = image_node_map_i0 + pos;
-  }
-  else { // node was already mapped
-    image_node_map[ i_block ][ i ] = local_node_index[ i_node ];
+
+  if (image_node_map != nullptr) {
+    if ( !node_mapped[ i_node ] ) { // node has to be mapped
+      // get and atomically increase index of node to be mapped
+      uint pos = atomicAdd( i_node_to_map, 1 );
+      image_node_map[ i_block ][ i ] = image_node_map_i0 + pos;
+      local_node_index[ i_node ] = image_node_map_i0 + pos;
+    }
+    else { // node was already mapped
+      image_node_map[ i_block ][ i ] = local_node_index[ i_node ];
+    }
   }
 }
 
