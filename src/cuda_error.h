@@ -45,13 +45,16 @@ printMPIRank()
 {
 
 #ifdef HAVE_MPI
-  int proc_num;
-  MPI_Comm_size( MPI_COMM_WORLD, &proc_num );
-  if ( proc_num > 1 )
-  {
-    int mpi_id;
-    MPI_Comm_rank( MPI_COMM_WORLD, &mpi_id );
-    printf( "MPI rank: %d\t", mpi_id );
+  int initialized;
+  MPI_Initialized( &initialized );
+  if ( initialized ) {
+    int proc_num;
+    MPI_Comm_size( MPI_COMM_WORLD, &proc_num );
+    if ( proc_num > 1 ) {
+      int mpi_id;
+      MPI_Comm_rank( MPI_COMM_WORLD, &mpi_id );
+      printf( "MPI rank: %d\t", mpi_id );
+    }
   }
 #endif
 

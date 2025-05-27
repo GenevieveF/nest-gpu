@@ -624,7 +624,6 @@ NESTGPU::EndSimulation()
   if ( n_hosts_ > 1 && verbosity_level_ >= 5 )
   {
     std::cout << HostIdStr() << "  InsertHostGroupSourceNode_time: " << conn_->InsertHostGroupSourceNode_time_ << "\n";
-    std::cout << HostIdStr() << "  RemoteConnectSource_time: " << conn_->RemoteConnectSource_time_ << "\n";
     std::cout << HostIdStr() << "  ConnectRemoteConnectSource_time: " << conn_->ConnectRemoteConnectSource_time_ << "\n";
     std::cout << HostIdStr() << "  ConnectRemoteConnectTarget_time: " << conn_->ConnectRemoteConnectTarget_time_ << "\n";
     std::cout << HostIdStr() << "  SetUsedSourceNodes_time: " << conn_->SetUsedSourceNodes_time_ << "\n";
@@ -640,7 +639,12 @@ NESTGPU::EndSimulation()
     std::cout << HostIdStr() << "  SortSourceImageNodeMap_time: " << conn_->SortSourceImageNodeMap_time_ << "\n";
     std::cout << HostIdStr() << "  SetLocalNodeIndex_time: " << conn_->SetLocalNodeIndex_time_ << "\n";
     std::cout << HostIdStr() << "  FixConnectionSourceNodeIndexes_time: " << conn_->FixConnectionSourceNodeIndexes_time_ << "\n";
-    
+    std::cout << HostIdStr() << "  SearchSourceNodesRangeInMap_time: " << conn_->SearchSourceNodesRangeInMap_time_ << "\n";
+    std::cout << HostIdStr() << "  TranslateSourceNodeMap_time: " << conn_->TranslateSourceNodeMap_time_ << "\n";
+    std::cout << HostIdStr() << "  MapSourceNodeSequence_time: " << conn_->MapSourceNodeSequence_time_ << "\n";
+    std::cout << HostIdStr() << "  RemoteConnectTarget_time: " << conn_->RemoteConnectTarget_time_ << "\n";
+    std::cout << HostIdStr() << "  RemoteConnectSource_time: " << conn_->RemoteConnectSource_time_ << "\n";
+
   }
 
   if ( verbosity_level_ >= 1 )
@@ -2430,7 +2434,7 @@ NESTGPU::SetIntParam( std::string param_name, int val )
     break;
   case i_verbosity_level:
     SetVerbosityLevel( val );
-    if ( val >= 5 )
+    if ( val >= 6 )
     {
       cuda_error_ns::verbose_ = 1;
     }

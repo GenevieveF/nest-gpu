@@ -92,12 +92,17 @@ from argparse import ArgumentParser
 parser = ArgumentParser()
 parser.add_argument("--path", type=str, default=".")
 parser.add_argument("--seed", type=int, default=12345)
+parser.add_argument("--fake_mpi_proc_num", type=int, default=0)
+parser.add_argument("--fake_mpi_proc_id", type=int, default=0)
 args = parser.parse_args()
 
 M_INFO = 10
 M_ERROR = 30
 
-ngpu.ConnectMpiInit()
+if args.fake_mpi_proc_num > 0:
+    ngpu.FakeConnectMpiInit(args.fake_mpi_proc_num, args.fake_mpi_proc_id)
+else:
+    ngpu.ConnectMpiInit()
 
 mpi_id = ngpu.HostId()
 mpi_np = ngpu.HostNum()
@@ -127,14 +132,14 @@ params = {
     'use_all_to_all': False, # Connect using all to all rule
     'check_conns': False,    # Get ConnectionId objects after build. VERY SLOW!
     'use_dc_input': False,   # Use DC input instead of Poisson generators
-    'verbose_log': False,    # Enable verbose output per MPI process
+    'verbose_log': True,    # Enable verbose output per MPI process
 }
 
 
 def rank_print(message):
     """Prints message and attaches MPI rank"""
     if params['verbose_log']:
-        print(f"MPI RANK {mpi_id}: {message}")
+        print(f"MPI RANK {mpi_id}: {message}", flush=True)
 
 rank_print("Simulation with {} MPI processes".format(mpi_np))
 
@@ -260,7 +265,6 @@ def build_network():
             neurons.append(ngpu.RemoteCreate(i, 'iaf_psc_alpha', NE+NI, 1, model_params).node_seq)
             E_pops.append(neurons[i][0:NE])
             I_pops.append(neurons[i][NE:NE+NI])
-
     else:
         neurons.append(ngpu.Create('iaf_psc_alpha', NE+NI, 1, model_params))
         E_pops.append(neurons[mpi_id][0:NE])
@@ -419,7 +423,7 @@ def run_simulation():
     time_start = perf_counter_ns()
 
     ngpu.SetKernelStatus({
-        "verbosity_level": 4,
+        "verbosity_level": 5,
         "rnd_seed": params["seed"],
         "time_resolution": params['dt'],
         "max_node_n_bits": 28,
@@ -438,14 +442,17 @@ def run_simulation():
     ngpu.Calibrate()
 
     time_calibrate = perf_counter_ns()
+    if args.fake_mpi_proc_num > 0:
+        time_presimulate = time_calibrate
+        time_simulate = time_calibrate
+    else:
+        ngpu.Simulate(params['presimtime'])
 
-    ngpu.Simulate(params['presimtime'])
+        time_presimulate = perf_counter_ns()
 
-    time_presimulate = perf_counter_ns()
+        ngpu.Simulate(params['simtime'])
 
-    ngpu.Simulate(params['simtime'])
-
-    time_simulate = perf_counter_ns()
+        time_simulate = perf_counter_ns()
 
     time_dict.update({
             "time_initialize": time_initialize - time_start,

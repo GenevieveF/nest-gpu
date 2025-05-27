@@ -65,7 +65,6 @@ class Connection
 {
 public:
   double InsertHostGroupSourceNode_time_;
-  double RemoteConnectSource_time_;
   double ConnectRemoteConnectSource_time_;
   double ConnectRemoteConnectTarget_time_;
   double SetUsedSourceNodes_time_;
@@ -81,6 +80,12 @@ public:
   double SortSourceImageNodeMap_time_;
   double SetLocalNodeIndex_time_;
   double FixConnectionSourceNodeIndexes_time_;
+  double SearchSourceNodesRangeInMap_time_;
+  double TranslateSourceNodeMap_time_;
+  double MapSourceNodeSequence_time_;
+  double RemoteConnectTarget_time_;
+  double RemoteConnectSource_time_;
+
   bool check_node_maps_;
 
   virtual ~Connection() {}; // destructor
@@ -401,7 +406,6 @@ public:
 
   int InitTimers() {
       InsertHostGroupSourceNode_time_ = 0;
-      RemoteConnectSource_time_ = 0;
       ConnectRemoteConnectSource_time_ = 0;
       ConnectRemoteConnectTarget_time_ = 0;
       SetUsedSourceNodes_time_ = 0;
@@ -417,6 +421,12 @@ public:
       SortSourceImageNodeMap_time_ = 0;
       SetLocalNodeIndex_time_ = 0;
       FixConnectionSourceNodeIndexes_time_ = 0;
+      SearchSourceNodesRangeInMap_time_ = 0;
+      TranslateSourceNodeMap_time_ = 0;
+      MapSourceNodeSequence_time_ = 0;
+      RemoteConnectTarget_time_ = 0;
+      RemoteConnectSource_time_ = 0;
+
       return 0;
   }
 };
