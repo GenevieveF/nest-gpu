@@ -3130,11 +3130,13 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
     }
     int i_host = it - host_group_[group_local_id].begin();
 
-    // insert the source node indexes in the host-group array of source nodes of the host i_host  
+    // insert the source node indexes in the host-group array of source nodes of the host i_host
+    double time_mark = getRealTime();
     for (inode_t i=0; i<n_source_arr[ish]; i++) {
       inode_t i_source = hGetNodeIndex(h_source_arr[ish], i);
       host_group_source_node_[group_local_id][i_host].insert(i_source);
     }
+    InsertHostGroupSourceNode_time_ += (getRealTime() - time_mark);
   }
 
   if (i_target_host < 0) {
