@@ -526,6 +526,7 @@ NESTGPU::Calibrate()
 
   gpuErrchk( cudaMemcpyToSymbolAsync( NESTGPUTimeResolution, &time_resolution_, sizeof( float ) ) );
 
+  build_real_time_ = getRealTime();
   PrintTimers();
   
   return 0;
@@ -568,7 +569,7 @@ NESTGPU::StartSimulation()
     gpuErrchk( cudaMemcpyToSymbolAsync( NESTGPUTime, &neur_t0_, sizeof( double ) ) );
     long long time_idx = ( int ) round( neur_t0_ / time_resolution_ );
     multimeter_->WriteRecords( neur_t0_, time_idx );
-    build_real_time_ = getRealTime();
+    //build_real_time_ = getRealTime(); moved at the end of Calibrate method
     first_simulation_flag_ = false;
   }
   else
