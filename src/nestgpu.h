@@ -598,7 +598,7 @@ public:
 
   int SimulationStep();
 
-  int EndSimulation();
+  int PrintTimers();
 
   int ConnectMpiInit( int argc, char* argv[] );
 

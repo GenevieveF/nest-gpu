@@ -148,7 +148,7 @@ extern "C"
 
   int NESTGPU_SimulationStep();
 
-  int NESTGPU_EndSimulation();
+  int NESTGPU_PrintTimers();
 
   int NESTGPU_ConnectMpiInit( int argc, char* argv[] );
   

@@ -526,6 +526,8 @@ NESTGPU::Calibrate()
 
   gpuErrchk( cudaMemcpyToSymbolAsync( NESTGPUTimeResolution, &time_resolution_, sizeof( float ) ) );
 
+  PrintTimers();
+  
   return 0;
 }
 
@@ -549,7 +551,7 @@ NESTGPU::Simulate()
     }
     SimulationStep();
   }
-  EndSimulation();
+  PrintTimers();
 
   return 0;
 }
@@ -586,7 +588,7 @@ NESTGPU::StartSimulation()
 }
 
 int
-NESTGPU::EndSimulation()
+NESTGPU::PrintTimers()
 {
   if ( verbosity_level_ >= 2 && print_time_ == true )
   {
@@ -594,9 +596,6 @@ NESTGPU::EndSimulation()
   }
 
   end_real_time_ = getRealTime();
-
-  // multimeter_->CloseFiles();
-  // neuron.rk5.Free();
 
   if ( verbosity_level_ >= 3 )
   {

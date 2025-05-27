@@ -782,12 +782,12 @@ extern "C"
   }
 
   int
-  NESTGPU_EndSimulation()
+  NESTGPU_PrintTimers()
   {
     int ret = 0;
     BEGIN_ERR_PROP
     {
-      ret = NESTGPU_instance->EndSimulation();
+      ret = NESTGPU_instance->PrintTimers();
     }
     END_ERR_PROP return ret;
   }
