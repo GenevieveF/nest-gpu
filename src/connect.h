@@ -155,6 +155,10 @@ public:
   // get array of local indexes  of all host groups
   virtual std::vector< int > &getHostGroupLocalId() = 0;
 
+  // get number of bits used in spike representation for bit packing in MPI
+  virtual std::vector< std::vector< int > > &getBitPackNbits() = 0;
+  virtual std::vector< int > &getBitPackNbitsThisHost() = 0;
+
 #ifdef HAVE_MPI
   // get local MPI communication groups
   virtual std::vector<MPI_Comm> &getMPIComm() = 0;
@@ -736,6 +740,11 @@ class ConnectionTemplate : public Connection
   std::vector<std::vector< std::vector< inode_t > > > host_group_source_node_vect_;
   // map of host group source nodes to local image nodes
   std::vector<std::vector< std::vector< int64_t > > > host_group_local_node_index_;
+  // number of used bits in local image node indexes in host groups
+  std::vector< std::vector< int > > bit_pack_nbits_;
+  std::vector< int > bit_pack_nbits_this_host_;
+  
+   
 
   // local ids of the host groups to which each node should send spikes
   std::vector< std::vector< int > > node_target_host_group_; // [n_local_nodes ][num. of target host groups ]
@@ -880,6 +889,18 @@ public:
   std::vector< int > &getHostGroupLocalId()
   {
     return host_group_local_id_;
+  }
+
+  // get number of bits used in spike representation for bit packing in MPI
+  std::vector< std::vector< int > > &getBitPackNbits()
+  {
+    return bit_pack_nbits_;
+  }
+  
+  // get number of bits used in spike representation for bit packing in MPI
+  std::vector< int > &getBitPackNbitsThisHost()
+  {
+    return bit_pack_nbits_this_host_;
   }
 
   // get MPI communicator of local host groups

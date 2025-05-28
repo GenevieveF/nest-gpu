@@ -92,6 +92,7 @@ extern uint* d_ExternalSourceSpikeIdx0;
 
 extern std::vector<uint> h_ExternalTargetSpikeNum;
 extern std::vector< std::vector< int > > h_ExternalSourceSpikeNum;
+extern std::vector< std::vector< int > > h_ExternalSourceSpikeNumBitPacked;
 extern std::vector< uint > h_ExternalSourceSpikeIdx0;
 extern std::vector< uint > h_ExternalTargetSpikeNodeId;
 extern std::vector< std::vector < uint > > h_ExternalSourceSpikeNodeId;

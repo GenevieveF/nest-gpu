@@ -1,6 +1,8 @@
 import ctypes
 import nestgpu as ngpu
 
+ngpu.SetKernelStatus("verbosity_level", 0)
+
 N = 5
 
 neuron = ngpu.Create("aeif_cond_beta_multisynapse", 2*N)

@@ -163,6 +163,8 @@ class NESTGPU
 
   bool mpi_flag_; // true if MPI is initialized
 
+  bool mpi_bitpack_;
+  
   bool remote_spike_mul_;
 
   std::vector< int16_t > node_group_map_;
@@ -288,7 +290,11 @@ class NESTGPU
   double SendSpikeToRemote_CUDAcp_time_;
 
   double RecvSpikeFromRemote_CUDAcp_time_;
-    
+
+  double MpiBitPack_time_;
+
+  double MpiBitUnpack_time_;
+  
   bool first_simulation_flag_;
 
 public:

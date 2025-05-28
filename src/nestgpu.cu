@@ -98,6 +98,7 @@ enum KernelBoolParamIndexes
   i_remove_conn_key,
   i_remote_spike_mul,
   i_check_node_maps,
+  i_mpi_bitpack,
   N_KERNEL_BOOL_PARAM
 };
 
@@ -126,7 +127,8 @@ const std::string kernel_bool_param_name[ N_KERNEL_BOOL_PARAM ] = {
   "print_time",
   "remove_conn_key",
   "remote_spike_mul",
-  "check_node_maps"
+  "check_node_maps",
+  "mpi_bitpack"
 };
 
 int
@@ -204,6 +206,8 @@ NESTGPU::NESTGPU()
   remove_conn_key_ = false;
 
   mpi_flag_ = false;
+  mpi_bitpack_ = true;
+  
   remote_spike_mul_ = false;
 
   nested_loop_algo_ = CumulSumNestedLoopAlgo;
@@ -219,6 +223,8 @@ NESTGPU::NESTGPU()
   GetSpike_time_ = 0;
   SpikeReset_time_ = 0;
   ExternalSpikeReset_time_ = 0;
+  MpiBitPack_time_ = 0;
+  MpiBitUnpack_time_ = 0;
 
   first_simulation_flag_ = true;
 
@@ -620,6 +626,10 @@ NESTGPU::PrintTimers()
     std::cout << HostIdStr() << "  RecvSpikeFromRemote_comm_time: " << RecvSpikeFromRemote_comm_time_ << "\n";
     std::cout << HostIdStr() << "  SendSpikeToRemote_CUDAcp_time: " << SendSpikeToRemote_CUDAcp_time_ << "\n";
     std::cout << HostIdStr() << "  RecvSpikeFromRemote_CUDAcp_time: " << RecvSpikeFromRemote_CUDAcp_time_ << "\n";
+    if (mpi_bitpack_) {
+      std::cout << HostIdStr() << "  MpiBitPack_time: " << MpiBitPack_time_ << "\n";
+      std::cout << HostIdStr() << "  MpiBitUnpack_time: " << MpiBitUnpack_time_ << "\n";
+    }
   }
   if ( n_hosts_ > 1 && verbosity_level_ >= 5 )
   {
@@ -2215,6 +2225,8 @@ NESTGPU::GetBoolParam( std::string param_name )
     return remote_spike_mul_;
   case i_check_node_maps:
     return check_node_maps_;
+  case i_mpi_bitpack:
+    return mpi_bitpack_;
   default:
     throw ngpu_exception( std::string( "Unrecognized kernel boolean parameter " ) + param_name );
   }
@@ -2239,6 +2251,9 @@ NESTGPU::SetBoolParam( std::string param_name, bool val )
   case i_check_node_maps:
     check_node_maps_ = val;
     conn_->check_node_maps_ = val;
+    break;
+  case i_mpi_bitpack:
+    mpi_bitpack_ = val;
     break;
   default:
     throw ngpu_exception( std::string( "Unrecognized kernel boolean parameter " ) + param_name );

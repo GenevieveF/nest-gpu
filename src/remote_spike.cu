@@ -141,6 +141,7 @@ uint* d_ExternalSourceSpikeIdx0;
 
 std::vector<uint> h_ExternalTargetSpikeNum;
 std::vector< std::vector< int > > h_ExternalSourceSpikeNum;
+std::vector< std::vector< int > > h_ExternalSourceSpikeNumBitPacked;
 std::vector<uint> h_ExternalSourceSpikeIdx0;
 std::vector<uint> h_ExternalTargetSpikeNodeId;
 std::vector<std::vector <uint> > h_ExternalSourceSpikeNodeId;
@@ -406,13 +407,16 @@ NESTGPU::ExternalSpikeInit()
   //h_ExternalSourceSpikeNum.resize( nhg + 1 );
   //h_ExternalSourceSpikeNodeId.resize( nhg + 1 );
   h_ExternalSourceSpikeNum.resize( nhg );
+  h_ExternalSourceSpikeNumBitPacked.resize( nhg );
   h_ExternalSourceSpikeNodeId.resize( nhg );
 
   h_ExternalSourceSpikeNum[0].resize( n_hosts_ );
+  h_ExternalSourceSpikeNumBitPacked[0].resize( n_hosts_ );
   h_ExternalSourceSpikeNodeId[0].resize( max_remote_spike_num_ );
 
   for (uint ihg=1; ihg<nhg; ihg++) {
     h_ExternalSourceSpikeNum[ihg].resize( host_group[ihg].size() );
+    h_ExternalSourceSpikeNumBitPacked[ihg].resize( host_group[ihg].size() );
     h_ExternalSourceSpikeNodeId[ihg].resize( max_remote_spike_num_ );
   }
   h_ExternalSourceSpikeNodeId_flat.resize( max_remote_spike_num_ );
