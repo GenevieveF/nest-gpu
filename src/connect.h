@@ -3039,8 +3039,13 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_Connect( curandGenerator_t& gen,
 
   ////////////////////////
   // TEMPORARY, TO BE IMPROVED
-  if ( syn_spec.syn_group_ >= 1 )
+  if ( (syn_spec.syn_group_ & syn_mask_) >= 1 )
   {
+    //printf("Error, syn_spec.syn_group_: %d\n", syn_spec.syn_group_);
+    //printf("max_syn_nbits: %d syn_mask: %x\n", max_syn_nbits_,  syn_mask_);
+    //printf("syn_mask & syn_spec.syn_group: %d\n",
+    //	   syn_mask_ & syn_spec.syn_group_);    
+    //exit(-1);
     spike_time_flag_ = true;
     rev_conn_flag_ = true;
   }

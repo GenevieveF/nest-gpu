@@ -458,11 +458,18 @@ def run_simulation():
         "simulation_params": params
     }
 
+    gpu_mem_dict = {
+        "gpu_mem_peak": ngpu.getCUDAMemHostPeak(),
+        "gpu_mem_used": ngpu.getCUDAMemHostUsed(),
+        "gpu_mem_total": ngpu.getCUDAMemTotal()
+    }
+
     info_dict = {
         "rank": mpi_id,
         "seed": seed,
         "conf": conf_dict,
-        "timers": time_dict
+        "timers": time_dict,
+        "gpu_mem": gpu_mem_dict
     }
 
     if params['record_spikes']:
