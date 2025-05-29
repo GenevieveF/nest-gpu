@@ -239,10 +239,6 @@ class NESTGPU
 
   std::vector< float > ext_neuron_input_spike_mul_;
 
-  int setNHosts( int n_hosts );
-
-  int setThisHost( int i_host );
-
   int CreateNodeGroup( int n_nodes, int n_ports );
 
   int CheckUncalibrated( std::string message );
@@ -306,6 +302,10 @@ public:
   NESTGPU();
 
   ~NESTGPU();
+
+  int setNHosts( int n_hosts );
+
+  int setThisHost( int i_host );
 
   int SetRandomSeed( unsigned long long seed );
 

@@ -154,6 +154,8 @@ extern "C"
   
   int NESTGPU_FakeConnectMpiInit(int n_hosts, int this_host);
 
+  int NESTGPU_SetNHosts(int n_hosts);
+
   int NESTGPU_MpiFinalize();
 
   int NESTGPU_HostId();

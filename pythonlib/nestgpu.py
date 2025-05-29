@@ -1601,6 +1601,16 @@ def FakeConnectMpiInit(n_hosts, this_host):
         raise ValueError(GetErrorMessage())
     return ret
 
+NESTGPU_SetNHosts = _nestgpu.NESTGPU_SetNHosts
+NESTGPU_SetNHosts.argtypes = (ctypes.c_int, )
+NESTGPU_SetNHosts.restype = ctypes.c_int
+def SetNHosts(n_hosts):
+    "Set number of hosts when it should differ from number of MPI processes"
+    ret = NESTGPU_SetNHosts(ctypes.c_int(n_hosts))
+    if GetErrorCode() != 0:
+        raise ValueError(GetErrorMessage())
+    return ret
+
 
 NESTGPU_HostId = _nestgpu.NESTGPU_HostId
 NESTGPU_HostId.restype = ctypes.c_int

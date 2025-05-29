@@ -813,6 +813,17 @@ extern "C"
     }
     END_ERR_PROP return ret;
   }
+  
+  int
+  NESTGPU_SetNHosts(int n_hosts)
+  {
+    int ret = 0;
+    BEGIN_ERR_PROP
+    {
+      ret = NESTGPU_instance->setNHosts(n_hosts);
+    }
+    END_ERR_PROP return ret;
+  }
 
   int
   NESTGPU_MpiFinalize()
