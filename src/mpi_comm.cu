@@ -289,11 +289,15 @@ NESTGPU::RecvSpikeFromRemote()
 
       MPI_Allgatherv(sendbuf, sendcount_packed, MPI_INT, recvbuf, recvcounts_packed, displs, MPI_INT, mpi_comm_vect[ihg-1]);
 
+      SpikeNumAllgather_send_ += sendcount;
+      SpikeNumAllgather_send_packed_ += sendcount_packed;
       double time_mark = getRealTime();
       // loop on hosts
       for ( uint gi_host = 0; gi_host < nh; gi_host++ ) {
 	int i_host = host_group[ihg][gi_host];
 	if (i_host != this_host_) {
+	  SpikeNumAllgather_recv_packed_ += recvcounts_packed[i_host];
+	  SpikeNumAllgather_recv_ += recvcounts[i_host];
 	  uint *recvbuf_of_host = &h_ExternalSourceSpikeNodeId[ihg][ gi_host * max_spike_per_host_ ];
 	  int count = h_ExternalSourceSpikeNum[ihg][gi_host];
 	  bitUnpackInPlace(recvbuf_of_host, count, bit_pack_nbits[ihg][gi_host]);

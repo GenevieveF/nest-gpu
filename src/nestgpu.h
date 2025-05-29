@@ -294,6 +294,11 @@ class NESTGPU
   double MpiBitPack_time_;
 
   double MpiBitUnpack_time_;
+
+  int64_t SpikeNumAllgather_send_;
+  int64_t SpikeNumAllgather_send_packed_;
+  int64_t SpikeNumAllgather_recv_;
+  int64_t SpikeNumAllgather_recv_packed_;
   
   bool first_simulation_flag_;
 

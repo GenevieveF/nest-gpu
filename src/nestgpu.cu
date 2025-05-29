@@ -225,7 +225,12 @@ NESTGPU::NESTGPU()
   ExternalSpikeReset_time_ = 0;
   MpiBitPack_time_ = 0;
   MpiBitUnpack_time_ = 0;
-
+  
+  SpikeNumAllgather_send_ = 0;
+  SpikeNumAllgather_send_packed_ = 0;
+  SpikeNumAllgather_recv_ = 0;
+  SpikeNumAllgather_recv_packed_ = 0;
+ 
   first_simulation_flag_ = true;
 
 }
@@ -629,6 +634,11 @@ NESTGPU::PrintTimers()
     if (mpi_bitpack_) {
       std::cout << HostIdStr() << "  MpiBitPack_time: " << MpiBitPack_time_ << "\n";
       std::cout << HostIdStr() << "  MpiBitUnpack_time: " << MpiBitUnpack_time_ << "\n";
+
+      std::cout << HostIdStr() << "  SpikeNumAllgather_send_: " << SpikeNumAllgather_send_ << std::endl;
+      std::cout << HostIdStr() << "  SpikeNumAllgather_send_packed_: " << SpikeNumAllgather_send_packed_ << std::endl;
+      std::cout << HostIdStr() << "  SpikeNumAllgather_recv_: " << SpikeNumAllgather_recv_ << std::endl;
+      std::cout << HostIdStr() << "  SpikeNumAllgather_recv_packed_: " << SpikeNumAllgather_recv_packed_ << std::endl;
     }
   }
   if ( n_hosts_ > 1 && verbosity_level_ >= 5 )
