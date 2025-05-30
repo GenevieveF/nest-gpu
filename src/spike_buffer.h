@@ -77,6 +77,6 @@ __global__ void DeviceSpikeBufferInit( int n_spike_buffers,
   float* spike_buffer_mul,
   long long* last_rev_spike_time_idx );
 
-int spikeBufferInit( uint n_spike_buffers, int max_spike_buffer_size, int spike_buffer_algo );
+int spikeBufferInit( uint n_local_nodes, uint n_image_nodes, int max_spike_buffer_size, int spike_buffer_algo );
 
 #endif

@@ -344,9 +344,10 @@ InitLastSpikeTimeIdx( unsigned int n_spike_buffers, int spike_time_idx )
 }
 
 int
-spikeBufferInit( uint n_spike_buffers, int max_spike_buffer_size, int spike_buffer_algo )
+  spikeBufferInit( uint n_local_nodes, uint n_image_nodes, int max_spike_buffer_size, int spike_buffer_algo )
 {
-  // unsigned int n_spike_buffers = net_connection->connection_.size();
+  uint n_spike_buffers = (spike_buffer_algo == INPUT_SPIKE_BUFFER_ALGO) ? n_local_nodes : ( n_local_nodes + n_image_nodes ); 
+  
   h_NSpikeBuffer = n_spike_buffers;
 
   CUDAMALLOCCTRL( "&d_LastSpikeTimeIdx", &d_LastSpikeTimeIdx, n_spike_buffers * sizeof( long long ) );

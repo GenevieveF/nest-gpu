@@ -478,7 +478,7 @@ NESTGPU::Calibrate()
     conn_->freeConnectionKey();
   }
 
-  unsigned int n_spike_buffers = GetNTotalNodes();
+  //unsigned int n_spike_buffers = GetNTotalNodes();
   NestedLoop::Init(nested_loop_algo_, max_spike_num_);
 
   PRINT_TIME;
@@ -498,7 +498,7 @@ NESTGPU::Calibrate()
 
   PRINT_TIME;
   
-  spikeBufferInit( GetNTotalNodes(), max_spike_buffer_size_, conn_->getSpikeBufferAlgo() );
+  spikeBufferInit( GetNLocalNodes(), n_image_nodes, max_spike_buffer_size_, conn_->getSpikeBufferAlgo() );
 
   PRINT_TIME;
   
