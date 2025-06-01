@@ -123,7 +123,7 @@ template <>
 int
 ConnectionTemplate< conn16b_key, conn16b_struct >::getConnDelay( const conn16b_key& conn_key )
 {
-  return ( int ) ( ( conn_key & delay_mask_ ) >> max_port_syn_nbits_ );
+  return ( int ) ( ( conn_key & delay_mask_ ) >> max_port_syn_nbits_ ) + min_allowed_delay_;
 }
 
 template <>

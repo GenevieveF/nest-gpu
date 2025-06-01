@@ -38,7 +38,7 @@ template <>
 __device__ __forceinline__ void
 setConnDelay< conn12b_key >( conn12b_key& conn_key, int delay )
 {
-  conn_key = ( conn_key & ( ~DelayMask ) ) | delay;
+  conn_key = ( conn_key & ( ~DelayMask ) ) | (delay - MinAllowedDelay);
 }
 
 template <>
@@ -73,7 +73,7 @@ template <>
 __device__ __forceinline__ int
 getConnDelay< conn12b_key >( const conn12b_key& conn_key )
 {
-  return conn_key & DelayMask;
+  return (conn_key & DelayMask) + MinAllowedDelay;
 }
 
 template <>

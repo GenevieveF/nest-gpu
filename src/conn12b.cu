@@ -144,7 +144,7 @@ template <>
 int
 ConnectionTemplate< conn12b_key, conn12b_struct >::getConnDelay( const conn12b_key& conn_key )
 {
-  return conn_key & delay_mask_;
+  return (conn_key & delay_mask_) + min_allowed_delay_;
 }
 
 template <>

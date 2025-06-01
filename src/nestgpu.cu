@@ -314,7 +314,7 @@ int
 NESTGPU::CheckImageNodes( int n_nodes )
 {
   int i_node_0 = GetNLocalNodes();
-  int max_n_nodes = ( int ) ( IntPow( 2, conn_->getMaxNodeNBits() ) - 1 );
+  int max_n_nodes = ( int ) ( IntPow( 2, conn_->getMaxNodeNBits() ) );
 
   if ( ( i_node_0 + n_nodes ) > max_n_nodes )
   {
@@ -373,8 +373,8 @@ NESTGPU::CreateNodeGroup( int n_nodes, int n_ports )
 {
   int i_node_0 = GetNLocalNodes();
   int max_node_nbits = conn_->getMaxNodeNBits();
-  int max_n_nodes = ( int ) ( IntPow( 2, max_node_nbits ) - 1 );
-  int max_n_ports = ( int ) ( IntPow( 2, conn_->getMaxPortNBits() ) - 1 );
+  int max_n_nodes = ( int ) ( IntPow( 2, max_node_nbits ) );
+  int max_n_ports = ( int ) ( IntPow( 2, conn_->getMaxPortNBits() ) );
   // std::cout << "max_node_nbits " << max_node_nbits << "\n";
 
   if ( ( i_node_0 + n_nodes ) > max_n_nodes )
