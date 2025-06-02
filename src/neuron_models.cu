@@ -56,7 +56,7 @@
 #include "user_m2.h"
 
 NodeSeq
-NESTGPU::_Create( std::string model_name, int n_nodes /*=1*/, int n_ports /*=1*/ )
+NESTGPU::_Create( std::string model_name, uint n_nodes /*=1*/, int n_ports /*=1*/ )
 {
   if ( !create_flag_ )
   {
@@ -218,7 +218,7 @@ NESTGPU::_Create( std::string model_name, int n_nodes /*=1*/, int n_ports /*=1*/
 }
 
 NodeSeq
-NESTGPU::Create( std::string model_name, int n_nodes, int n_ports )
+NESTGPU::Create( std::string model_name, uint n_nodes, int n_ports )
 {
   for ( int i_host = 0; i_host < n_hosts_; i_host++ )
   {

@@ -86,11 +86,14 @@ public:
   double RemoteConnectTarget_time_;
   double RemoteConnectSource_time_;
 
+  // the following is activated only for special testings on node maps
   bool check_node_maps_;
-  
+
+  //time resolution in ms
+  float time_resolution_;
+
   // minimum allowed delay in time step units
   uint min_allowed_delay_;
-
 
   virtual ~Connection() {}; // destructor
 
@@ -108,8 +111,11 @@ public:
   // bits reserved to represent synapse group
   virtual int setMaxSynNBits( int max_syn_nbits ) = 0;
 
-  // set minimum allowed delay in time step units
-  int setMinAllowedDelay(uint min_allowed_delay);
+  // set minimum allowed delay
+  int setMinAllowedDelay(float min_allowed_delay_float);
+  
+  // get minimum allowed delay
+  float getMinAllowedDelay();
   
   // get number of bits reserved to represent node indexes
   virtual int getMaxNodeNBits() = 0;
@@ -475,8 +481,6 @@ class ConnectionTemplate : public Connection
   std::vector< ConnKeyT* > conn_key_vect_;
 
   std::vector< ConnStructT* > conn_struct_vect_;
-
-  float time_resolution_;
 
   double start_real_time_;
 
@@ -2577,7 +2581,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::init()
 
   _setSpikeBufferAlgo( INPUT_SPIKE_BUFFER_ALGO );
   //_setSpikeBufferAlgo(OUTPUT_SPIKE_BUFFER_ALGO);
-  setMinAllowedDelay(1);
+  setMinAllowedDelay(time_resolution_);
 
   return 0;
 }
@@ -3070,6 +3074,11 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_Connect( curandGenerator_t& gen,
   SynSpec& syn_spec,
   bool remote_source_flag )
 {
+  int max_n_ports = ( int ) ( IntPow( 2, max_port_nbits_ ) );
+  if ( syn_spec.port_ >= max_n_ports ) {
+    throw ngpu_exception( "Port larger than maximum allowed by bits reserved for it"
+			  + std::to_string(max_n_ports));
+  }  
   if (first_connection_flag_ == true && n_hosts_>1) {
     remoteConnectionMapInit();
   }
@@ -4160,7 +4169,9 @@ template < class ConnKeyT, class ConnStructT >
 int
 ConnectionTemplate< ConnKeyT, ConnStructT >::setTimeResolution( float time_resolution )
 {
+  float min_allowed_delay_float = getMinAllowedDelay();
   time_resolution_ = time_resolution;
+  setMinAllowedDelay(min_allowed_delay_float);
 
   return 0;
 }

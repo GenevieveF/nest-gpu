@@ -76,6 +76,7 @@ enum KernelFloatParamIndexes
   i_max_spike_num_fact,
   i_max_spike_per_host_fact,
   i_max_remote_spike_num_fact,
+  i_min_allowed_delay,
   N_KERNEL_FLOAT_PARAM
 };
 
@@ -99,6 +100,7 @@ enum KernelBoolParamIndexes
   i_remote_spike_mul,
   i_check_node_maps,
   i_mpi_bitpack,
+  i_max_n_ports_warning,
   N_KERNEL_BOOL_PARAM
 };
 
@@ -112,7 +114,9 @@ enum ConnStructType
 const std::string kernel_float_param_name[ N_KERNEL_FLOAT_PARAM ] = { "time_resolution",
   "max_spike_num_fact",
   "max_spike_per_host_fact",
-  "max_remote_spike_num_fact" };
+  "max_remote_spike_num_fact",
+  "min_allowed_delay"
+};
 
 const std::string kernel_int_param_name[ N_KERNEL_INT_PARAM ] = { "rnd_seed",
   "verbosity_level",
@@ -128,7 +132,8 @@ const std::string kernel_bool_param_name[ N_KERNEL_BOOL_PARAM ] = {
   "remove_conn_key",
   "remote_spike_mul",
   "check_node_maps",
-  "mpi_bitpack"
+  "mpi_bitpack",
+  "max_n_ports_warning"
 };
 
 int
@@ -208,6 +213,8 @@ NESTGPU::NESTGPU()
   mpi_flag_ = false;
   mpi_bitpack_ = true;
   
+  max_n_ports_warning_ = true;
+    
   remote_spike_mul_ = false;
 
   nested_loop_algo_ = CumulSumNestedLoopAlgo;
@@ -310,11 +317,11 @@ NESTGPU::GetNTotalNodes()
   return GetNLocalNodes() + conn_->getNImageNodes();
 }
 
-int
-NESTGPU::CheckImageNodes( int n_nodes )
+uint
+NESTGPU::CheckImageNodes( uint n_nodes )
 {
-  int i_node_0 = GetNLocalNodes();
-  int max_n_nodes = ( int ) ( IntPow( 2, conn_->getMaxNodeNBits() ) );
+  uint i_node_0 = GetNLocalNodes();
+  uint max_n_nodes = ( uint ) ( IntPow( 2, conn_->getMaxNodeNBits() ) );
 
   if ( ( i_node_0 + n_nodes ) > max_n_nodes )
   {
@@ -368,12 +375,12 @@ NESTGPU::setConnStructType( int conn_struct_type )
   return 0;
 }
 
-int
-NESTGPU::CreateNodeGroup( int n_nodes, int n_ports )
+uint
+NESTGPU::CreateNodeGroup( uint n_nodes, int n_ports )
 {
-  int i_node_0 = GetNLocalNodes();
+  uint i_node_0 = GetNLocalNodes();
   int max_node_nbits = conn_->getMaxNodeNBits();
-  int max_n_nodes = ( int ) ( IntPow( 2, max_node_nbits ) );
+  uint max_n_nodes = ( uint ) ( IntPow( 2, max_node_nbits ) );
   int max_n_ports = ( int ) ( IntPow( 2, conn_->getMaxPortNBits() ) );
   // std::cout << "max_node_nbits " << max_node_nbits << "\n";
 
@@ -382,9 +389,12 @@ NESTGPU::CreateNodeGroup( int n_nodes, int n_ports )
     throw ngpu_exception(
       std::string( "Maximum number of local nodes " ) + std::to_string( max_n_nodes ) + " exceeded" );
   }
-  if ( n_ports > max_n_ports )
+  if ( n_ports > max_n_ports && max_n_ports_warning_)
   {
-    throw ngpu_exception( std::string( "Maximum number of ports " ) + std::to_string( max_n_ports ) + " exceeded" );
+    std::cout << "Warning: node group number of receptor ports larger than maximum " << max_n_ports << std::endl;
+    std::cout << "\tConnections can be made only to ports with index smaller than the maximum\n";
+    std::cout << "\tunless the number of bits reserved to represent the port is increased.\n";
+    std::cout << "\tThis warning message can be suppressed by setting the kernel parameter max_n_ports_warning to false" << std::endl;     
   }
   int i_group = node_vect_.size() - 1;
   node_group_map_.insert( node_group_map_.end(), n_nodes, i_group );
@@ -2237,6 +2247,8 @@ NESTGPU::GetBoolParam( std::string param_name )
     return check_node_maps_;
   case i_mpi_bitpack:
     return mpi_bitpack_;
+  case i_max_n_ports_warning:
+    return max_n_ports_warning_;
   default:
     throw ngpu_exception( std::string( "Unrecognized kernel boolean parameter " ) + param_name );
   }
@@ -2264,6 +2276,9 @@ NESTGPU::SetBoolParam( std::string param_name, bool val )
     break;
   case i_mpi_bitpack:
     mpi_bitpack_ = val;
+    break;
+  case i_max_n_ports_warning:
+    max_n_ports_warning_ = val;
     break;
   default:
     throw ngpu_exception( std::string( "Unrecognized kernel boolean parameter " ) + param_name );
@@ -2337,6 +2352,8 @@ NESTGPU::GetFloatParam( std::string param_name )
     return max_spike_per_host_fact_;
   case i_max_remote_spike_num_fact:
     return max_remote_spike_num_fact_;
+  case i_min_allowed_delay:
+    return conn_->getMinAllowedDelay();
   default:
     throw ngpu_exception( std::string( "Unrecognized kernel float parameter " ) + param_name );
   }
@@ -2361,6 +2378,9 @@ NESTGPU::SetFloatParam( std::string param_name, float val )
     break;
   case i_max_remote_spike_num_fact:
     max_remote_spike_num_fact_ = val;
+    break;
+  case i_min_allowed_delay:
+    conn_->setMinAllowedDelay(val);
     break;
   default:
     throw ngpu_exception( std::string( "Unrecognized kernel float parameter " ) + param_name );

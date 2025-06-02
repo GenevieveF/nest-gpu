@@ -164,6 +164,8 @@ class NESTGPU
   bool mpi_flag_; // true if MPI is initialized
 
   bool mpi_bitpack_;
+
+  bool max_n_ports_warning_;
   
   bool remote_spike_mul_;
 
@@ -239,11 +241,11 @@ class NESTGPU
 
   std::vector< float > ext_neuron_input_spike_mul_;
 
-  int CreateNodeGroup( int n_nodes, int n_ports );
+  uint CreateNodeGroup( uint n_nodes, int n_ports );
 
   int CheckUncalibrated( std::string message );
 
-  double* InitGetSpikeArray( int n_nodes, int n_ports );
+  double* InitGetSpikeArray( uint n_nodes, int n_ports );
 
   int NodeGroupArrayInit();
 
@@ -253,9 +255,9 @@ class NESTGPU
 
   int FreeNodeGroupMap();
 
-  int CheckImageNodes( int n_nodes );
+  uint CheckImageNodes( uint n_nodes );
 
-  NodeSeq _Create( std::string model_name, int n_nodes, int n_ports );
+  NodeSeq _Create( std::string model_name, uint n_nodes, int n_ports );
 
   double SpikeBufferUpdate_time_;
 
@@ -405,7 +407,7 @@ public:
   int GetIntParam( std::string param_name );
   int SetIntParam( std::string param_name, int val );
 
-  NodeSeq Create( std::string model_name, int n_nodes = 1, int n_ports = 1 );
+  NodeSeq Create( std::string model_name, uint n_nodes = 1, int n_ports = 1 );
 
   RemoteNodeSeq RemoteCreate( int i_host, std::string model_name, inode_t n_nodes = 1, int n_ports = 1 );
 
