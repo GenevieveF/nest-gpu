@@ -613,7 +613,7 @@ public:
 
   int PrintTimers();
 
-  int ConnectMpiInit( int argc, char* argv[] );
+  int ConnectMpiInit();
 
   int FakeConnectMpiInit(int n_hosts, int this_host);
 

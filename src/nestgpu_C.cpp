@@ -793,12 +793,12 @@ extern "C"
   }
 
   int
-  NESTGPU_ConnectMpiInit( int argc, char* argv[] )
+  NESTGPU_ConnectMpiInit()
   {
     int ret = 0;
     BEGIN_ERR_PROP
     {
-      ret = NESTGPU_instance->ConnectMpiInit( argc, argv );
+      ret = NESTGPU_instance->ConnectMpiInit();
     }
     END_ERR_PROP return ret;
   }

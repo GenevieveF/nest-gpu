@@ -348,7 +348,7 @@ NESTGPU::RecvSpikeFromRemote()
 }
 
 int
-NESTGPU::ConnectMpiInit( int argc, char* argv[] )
+NESTGPU::ConnectMpiInit()
 {
 #ifdef HAVE_MPI
   CheckUncalibrated( "MPI connections cannot be initialized after calibration" );
@@ -356,7 +356,7 @@ NESTGPU::ConnectMpiInit( int argc, char* argv[] )
   MPI_Initialized( &initialized );
   if ( !initialized )
   {
-    MPI_Init( &argc, &argv );
+    MPI_Init( nullptr, nullptr );
   }
   int n_hosts;
   int this_host;
@@ -367,7 +367,6 @@ NESTGPU::ConnectMpiInit( int argc, char* argv[] )
   setThisHost( this_host );
   //conn_->remoteConnectionMapInit();
   recv_mpi_request = new MPI_Request[ 2*n_hosts_ ];
-
   return 0;
 #else
   throw ngpu_exception( "MPI is not available in your build" );
