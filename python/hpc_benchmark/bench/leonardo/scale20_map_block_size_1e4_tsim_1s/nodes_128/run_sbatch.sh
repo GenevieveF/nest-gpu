@@ -16,4 +16,4 @@
 # the directory where sbatch was executed.
 
 ###export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK}
-srun python3 hpc_benchmark_wg_leonardo.py
+srun python3 hpc_benchmark.py --scale 20.0 --simtime 1000.0

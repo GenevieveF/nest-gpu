@@ -98,6 +98,7 @@ parser.add_argument("--scale", type=float, default=1.0)
 parser.add_argument("--simtime", type=float, default=250.0)
 parser.add_argument("--raster_plot", type=int, default=0)
 parser.add_argument("--record_spikes", type=int, default=1)
+parser.add_argument("--nhosts", type=int, default=0)
 
 args = parser.parse_args()
 
@@ -112,7 +113,17 @@ else:
 mpi_id = ngpu.HostId()
 mpi_np = ngpu.HostNum()
 
+if args.nhosts != 0:
+    mpi_np = args.nhosts
+
 hg = ngpu.CreateHostGroup(list(range(mpi_np)))
+
+if args.nhosts != 0:
+    ngpu.SetNHosts(args.nhosts)
+
+if mpi_id >= mpi_np:
+    ngpu.MpiFinalize()
+    quit()
 
 ###############################################################################
 # Parameter section

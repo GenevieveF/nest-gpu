@@ -76,7 +76,6 @@ References
        arXiv. 2110.02883
 """
 
-#print("ok py 0", flush=True)
 import os
 import sys
 import json
@@ -86,9 +85,7 @@ import matplotlib.pyplot as plt
 
 from time import perf_counter_ns
 
-#print("ok py 1", flush=True)
 import nestgpu as ngpu
-#print("ok py 2", flush=True)
 
 from argparse import ArgumentParser
 
@@ -97,6 +94,12 @@ parser.add_argument("--path", type=str, default=".")
 parser.add_argument("--seed", type=int, default=12345)
 parser.add_argument("--fake_mpi_proc_num", type=int, default=0)
 parser.add_argument("--fake_mpi_proc_id", type=int, default=0)
+parser.add_argument("--scale", type=float, default=1.0)
+parser.add_argument("--simtime", type=float, default=250.0)
+parser.add_argument("--raster_plot", type=int, default=0)
+parser.add_argument("--record_spikes", type=int, default=1)
+parser.add_argument("--nhosts", type=int, default=0)
+
 args = parser.parse_args()
 
 M_INFO = 10
@@ -110,9 +113,17 @@ else:
 mpi_id = ngpu.HostId()
 mpi_np = ngpu.HostNum()
 
-#print("ok py 5 ", mpi_id, flush=True)
+if args.nhosts != 0:
+    mpi_np = args.nhosts
+
 hg = ngpu.CreateHostGroup(list(range(mpi_np)))
-#print("ok py 6 ", mpi_id, flush=True)
+
+if args.nhosts != 0:
+    ngpu.SetNHosts(args.nhosts)
+
+if mpi_id >= mpi_np:
+    ngpu.MpiFinalize()
+    quit()
 
 ###############################################################################
 # Parameter section
@@ -120,21 +131,20 @@ hg = ngpu.CreateHostGroup(list(range(mpi_np)))
 
 
 params = {
-    'scale': 20.0,             # scaling factor of the network size
+    'scale': args.scale,             # scaling factor of the network size
                              # total network size = scale*11250 neurons
     'seed': args.seed,       # seed for random number generation
-    'simtime': 1000.,         # total simulation time in ms
+    'simtime': args.simtime,         # total simulation time in ms
     'presimtime': 50.,       # simulation time until reaching equilibrium
     'dt': 0.1,               # simulation step
     'stdp': False,           # enable plastic connections [feature not properlyly implemented yet!]
-    'record_spikes': True, #  True,  # switch to record spikes of excitatory
+    'record_spikes': (args.record_spikes != 0) ,  # switch to record spikes of excitatory
                              # neurons to file
     'show_plot': False,      # switch to show plot at the end of simulation
                              # disabled by default for benchmarking
-    'raster_plot': False,    # when record_spikes=True, depicts a raster plot
+    'raster_plot':  (args.raster_plot != 0) ,    # when record_spikes=True, depicts a raster plot
     'path_name': args.path,  # path where all files will have to be written
     'log_file': 'log',       # naming scheme for the log files
-    'use_all_to_all': False, # Connect using all to all rule
     'check_conns': False,    # Get ConnectionId objects after build. VERY SLOW!
     'use_dc_input': False,   # Use DC input instead of Poisson generators
     'verbose_log': True,    # Enable verbose output per MPI process
@@ -143,8 +153,8 @@ params = {
 
 def rank_print(message):
     """Prints message and attaches MPI rank"""
-    #if params['verbose_log']:
-    print(f"MPI RANK {mpi_id}: {message}", flush=True)
+    if params['verbose_log']:
+        print(f"MPI RANK {mpi_id}: {message}", flush=True)
 
 rank_print("Simulation with {} MPI processes".format(mpi_np))
 
@@ -266,12 +276,10 @@ def build_network():
     neurons = []; E_pops = []; I_pops = []
 
     if(mpi_np > 1):
-        #print("ok py 7 ", mpi_id, flush=True)
         for i in range(mpi_np):
             neurons.append(ngpu.RemoteCreate(i, 'iaf_psc_alpha', NE+NI, 1, model_params).node_seq)
             E_pops.append(neurons[i][0:NE])
             I_pops.append(neurons[i][NE:NE+NI])
-        #print("ok py 8 ", mpi_id, flush=True)
     else:
         neurons.append(ngpu.Create('iaf_psc_alpha', NE+NI, 1, model_params))
         E_pops.append(neurons[mpi_id][0:NE])
@@ -344,22 +352,7 @@ def build_network():
 
     rank_print('Creating local connections.')
     rank_print('Connecting excitatory -> excitatory population.')
-
-    if params['use_all_to_all']:
-        i_conn_rule = {'rule': 'all_to_all'}
-        e_conn_rule = {'rule': 'all_to_all'}
-    else:
-        i_conn_rule = {'rule': 'fixed_indegree', 'indegree': CI_distrib}
-        e_conn_rule = {'rule': 'fixed_indegree', 'indegree': CE_distrib}
-
-    brunel_params["connection_rules"] = {"inhibitory": i_conn_rule, "excitatory": e_conn_rule}
-    
-    #my_connect(E_pops[mpi_id], neurons[mpi_id],
-    #             e_conn_rule, syn_dict_ex)
-
-    #my_connect(I_pops[mpi_id], neurons[mpi_id],
-    #             i_conn_rule, syn_dict_in)
-        
+            
     time_connect_local = perf_counter_ns()
 
     rank_print('Creating remote connections.')
@@ -376,23 +369,6 @@ def build_network():
 
     ngpu.ConnectDistributedFixedIndegree(host_list, E_pops_list, host_list, neurons_list, CE, hg, syn_dict_ex)
     ngpu.ConnectDistributedFixedIndegree(host_list, I_pops_list, host_list, neurons_list, CI, hg, syn_dict_in)
-
-    #for i in range(mpi_np):
-    #    for j in range(mpi_np):
-    #        if(i!=j):
-    #            rank_print('Connecting excitatory {} -> excitatory {} population.'.format(i, j))
-    #
-    #            my_remoteconnect(i, E_pops[i], j, neurons[j],
-    #                                e_conn_rule, syn_dict_ex, hg)
-    #
-    #            rank_print('Connecting inhibitory {} -> excitatory {} population.'.format(i, j))
-    #            
-    #            my_remoteconnect(i, I_pops[i], j, neurons[j],
-    #                                i_conn_rule, syn_dict_in, hg)
-    #
-    #            rank_print('Connecting excitatory {} -> inhibitory {} population.'.format(i, j))
-    #
-    #            rank_print('Connecting inhibitory {} -> inhibitory {} population.'.format(i, j))
 
     # read out time used for building
     time_connect_remote = perf_counter_ns()
@@ -435,11 +411,14 @@ def run_simulation():
         "verbosity_level": 6,
         "rnd_seed": params["seed"],
         "time_resolution": params['dt'],
-        "max_node_n_bits": 29,
-        "max_syn_n_bits": 1,
+        "max_node_n_bits": 31,
+        "max_syn_n_bits": 0,
         "max_spike_num_fact": 0.01,
-        "max_spike_per_host_fact": 0.01
+        "max_spike_per_host_fact": 0.01,
+        "min_allowed_delay": 1.5,
+        "max_n_ports_warning": False        
         })
+    
     seed = ngpu.GetKernelStatus("rnd_seed")
     
     time_initialize = perf_counter_ns()
@@ -456,8 +435,11 @@ def run_simulation():
         time_simulate = time_calibrate
     else:
         ngpu.Simulate(params['presimtime'])
+        
         time_presimulate = perf_counter_ns()
-        ngpu.Simulate(params['presimtime'])
+        
+        ngpu.Simulate(params['simtime'])
+        
         time_simulate = perf_counter_ns()
 
     time_dict.update({
