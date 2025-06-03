@@ -147,7 +147,7 @@ params = {
     'log_file': 'log',       # naming scheme for the log files
     'check_conns': False,    # Get ConnectionId objects after build. VERY SLOW!
     'use_dc_input': False,   # Use DC input instead of Poisson generators
-    'verbose_log': True,    # Enable verbose output per MPI process
+    'verbose_log': False,    # Enable verbose output per MPI process
 }
 
 
@@ -408,7 +408,7 @@ def run_simulation():
     time_start = perf_counter_ns()
 
     ngpu.SetKernelStatus({
-        "verbosity_level": 6,
+        "verbosity_level": 5,
         "rnd_seed": params["seed"],
         "time_resolution": params['dt'],
         "max_node_n_bits": 31,
