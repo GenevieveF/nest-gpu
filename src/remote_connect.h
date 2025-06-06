@@ -2324,7 +2324,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectTarget( int target_hos
       
       // Find number of elements < i_source_1 + 1 in the map
       n_down_1 = search_block_array_down<inode_t>(&h_local_source_node_map_[ target_host ][0],
-							n_node_map, node_map_block_size_, i_source_1, n_down_0);
+							n_node_map, node_map_block_size_, i_source_1 + 1, n_down_0);
 
       // Compute number of source nodes already mapped
       n_mapped = n_down_1 - n_down_0;
