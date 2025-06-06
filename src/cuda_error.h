@@ -100,6 +100,54 @@ mapCUDAMemFree( void* dev_pt )
   }
 }
 
+
+
+
+
+
+
+inline bool
+mapCUDAMemReallocIfSmaller( void* dev_pt, size_t n_bytes )
+{
+  if ( cuda_error_ns::alloc_map_.find( dev_pt ) == cuda_error_ns::alloc_map_.end() )
+  {
+    throw ngpu_exception( "CUDA error: pointer not found in mapCUDAMemReallocIfSmaller." );
+  }
+  size_t n_bytes_old = cuda_error_ns::alloc_map_.at( dev_pt );
+  if (n_bytes_old >= n_bytes) {
+    return false;
+  }
+  cuda_error_ns::alloc_map_[dev_pt] = n_bytes;
+  cuda_error_ns::mem_used_ += n_bytes - n_bytes_old;
+  
+  if ( cuda_error_ns::mem_used_ > cuda_error_ns::mem_max_ )
+  {
+    cuda_error_ns::mem_max_ = cuda_error_ns::mem_used_;
+  }
+
+  if ( cuda_error_ns::verbose_ > 0 )
+  {
+    printMPIRank();
+    printf( "GPU memory usage: used = %.3f, max used = %.3f\n",
+      ( float ) cuda_error_ns::mem_used_ / 1024.0 / 1024.0,
+      ( float ) cuda_error_ns::mem_max_ / 1024.0 / 1024.0 );
+  }
+  return true;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 #define gpuErrchk( ans )                      \
   {                                           \
     gpuAssert( ( ans ), __FILE__, __LINE__ ); \
@@ -172,7 +220,20 @@ gpuAssert( cudaError_t code, const char* file, int line, bool abort = true )
     gpuAssert( cudaFree( dev_pt ), __FILE__, __LINE__ );                                           \
     mapCUDAMemFree( dev_pt );                                                                      \
   }
-#endif
+
+#define CUDAREALLOCIFSMALLER( str, dev_pt, n_bytes )                                                 \
+  {                                                                                                  \
+    bool flag = mapCUDAMemReallocIfSmaller( *dev_pt, n_bytes );                                      \
+    if ( flag ) {                                                                                    \
+      gpuAssert( cudaFree( dev_pt ), __FILE__, __LINE__ );                                           \
+      gpuAssert( cudaMalloc( dev_pt, n_bytes ), __FILE__, __LINE__ );                                \
+      if ( cuda_error_ns::verbose_ > 0 )                                                             \
+      {                                                                                              \
+        printMPIRank();                                                                              \
+        printf( "Reallocating device memory pointed by %s in at %s:%d\n", str, __FILE__, __LINE__ ); \
+      }                                                                                              \
+    }                                                                                                \
+  }                                                                                                  \
 
 //#define ACTIVATE_PRINT_TIME
 #ifdef ACTIVATE_PRINT_TIME
@@ -182,4 +243,8 @@ gpuAssert( cudaError_t code, const char* file, int line, bool abort = true )
   std::cout << "Time from start at " << __FILE__ << ":" << __LINE__ << "\t" << getRealTime() - start_real_time_ << std::endl;
 #else
 #define PRINT_TIME
+#endif
+
+extern void* d_ru_storage_;
+
 #endif

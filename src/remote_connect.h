@@ -1249,7 +1249,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectSource( int source_hos
   uint **d_check_node_map = nullptr;
   uint **d_check_image_node_map = nullptr;
   // auxiliary memory block
-  uint *d_aux_array = nullptr;
+  //uint *d_aux_array = nullptr;
 
   
   ///////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1418,10 +1418,8 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectSource( int source_hos
       transl = h_n_node_to_map;
 
       time_mark = getRealTime();
-      CUDAMALLOCCTRL( "&d_aux_array", &d_aux_array, aux_size * sizeof( uint ) );
+      CUDAREALLOCIFSMALLER( "&d_ru_storage_", &d_ru_storage_, aux_size * sizeof( uint ) );
       
-      CUDAMALLOCCTRL( "&d_aux_array", &d_aux_array, aux_size * sizeof( uint ) );
-
       //printf("n_node_map: %d, new_n_node_map: %d, transl: %d, node_map_block_size: %d, aux_size: %d, i0: %d, i1: %d\n",
       //     n_node_map, new_n_node_map, transl, node_map_block_size_, aux_size, i0, i1);
       
@@ -1434,16 +1432,16 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectSource( int source_hos
 	//printf("i_left: %ld, i_right: %ld, n_elem: %ld\n", i_left, i_right, n_elem);
 	if (n_elem > 0) {
 	  copyBlockArrayToArrayKernel<<< ( n_elem + 1023 ) / 1024, 1024 >>>
-	    (d_aux_array, d_node_map, node_map_block_size_, i_left, n_elem);
+	    ((uint*)d_ru_storage_, d_node_map, node_map_block_size_, i_left, n_elem);
 	  CUDASYNC;
 	  copyArrayToBlockArrayKernel<<< ( n_elem + 1023 ) / 1024, 1024 >>>
-	    (d_node_map, d_aux_array, node_map_block_size_, i_left + transl, n_elem);
+	    (d_node_map, (uint*)d_ru_storage_, node_map_block_size_, i_left + transl, n_elem);
 	  CUDASYNC;
 	  copyBlockArrayToArrayKernel<<< ( n_elem + 1023 ) / 1024, 1024 >>>
-	    (d_aux_array, d_image_node_map, node_map_block_size_, i_left, n_elem);
+	    ((uint*)d_ru_storage_, d_image_node_map, node_map_block_size_, i_left, n_elem);
 	  CUDASYNC;
 	  copyArrayToBlockArrayKernel<<< ( n_elem + 1023 ) / 1024, 1024 >>>
-	    (d_image_node_map, d_aux_array, node_map_block_size_, i_left + transl, n_elem);
+	    (d_image_node_map, (uint*)d_ru_storage_, node_map_block_size_, i_left + transl, n_elem);
 	  CUDASYNC;
 	}
 	i_right -= aux_size;
@@ -1705,10 +1703,8 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectSource( int source_hos
 	i0 = n_down_1;
 	transl = check_to_be_mapped;
 
-	CUDAMALLOCCTRL( "&d_aux_array", &d_aux_array, aux_size * sizeof( uint ) );
+	CUDAMALLOCCTRL( "&d_ru_storage_", &d_ru_storage_, aux_size * sizeof( uint ) );
       
-	CUDAMALLOCCTRL( "&d_aux_array", &d_aux_array, aux_size * sizeof( uint ) );
-
 	//printf("n_node_map: %d, new_n_node_map: %d, transl: %d, node_map_block_size: %d, aux_size: %d, i0: %d, i1: %d\n",
 	//     n_node_map, new_n_node_map, transl, node_map_block_size_, aux_size, i0, i1);
       
@@ -1721,16 +1717,16 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectSource( int source_hos
 	  //printf("i_left: %ld, i_right: %ld, n_elem: %ld\n", i_left, i_right, n_elem);
 	  if (n_elem > 0) {
 	    copyBlockArrayToArrayKernel<<< ( n_elem + 1023 ) / 1024, 1024 >>>
-	      (d_aux_array, d_check_node_map, node_map_block_size_, i_left, n_elem);
+	      ((uint*)d_ru_storage_, d_check_node_map, node_map_block_size_, i_left, n_elem);
 	    CUDASYNC;
 	    copyArrayToBlockArrayKernel<<< ( n_elem + 1023 ) / 1024, 1024 >>>
-	      (d_check_node_map, d_aux_array, node_map_block_size_, i_left + transl, n_elem);
+	      (d_check_node_map, (uint*)d_ru_storage_, node_map_block_size_, i_left + transl, n_elem);
 	    CUDASYNC;
 	    copyBlockArrayToArrayKernel<<< ( n_elem + 1023 ) / 1024, 1024 >>>
-	      (d_aux_array, d_check_image_node_map, node_map_block_size_, i_left, n_elem);
+	      ((uint*)d_ru_storage_, d_check_image_node_map, node_map_block_size_, i_left, n_elem);
 	    CUDASYNC;
 	    copyArrayToBlockArrayKernel<<< ( n_elem + 1023 ) / 1024, 1024 >>>
-	      (d_check_image_node_map, d_aux_array, node_map_block_size_, i_left + transl, n_elem);
+	      (d_check_image_node_map, (uint*)d_ru_storage_, node_map_block_size_, i_left + transl, n_elem);
 	    CUDASYNC;
 	  }
 	  i_right -= aux_size;
@@ -2146,10 +2142,6 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectSource( int source_hos
     delete[] h_check_image_node_map;
   }
 
-  if (d_aux_array != nullptr) {
-    CUDAFREECTRL( "d_aux_array", d_aux_array );
-  }
-
   return 0;
 }
 
@@ -2218,7 +2210,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectTarget( int target_hos
   uint **h_check_node_map = nullptr;
   uint **d_check_node_map = nullptr;
   // auxiliary memory block
-  uint *d_aux_array = nullptr;
+  // uint *d_aux_array = nullptr;
 
   
   ///////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2361,10 +2353,8 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectTarget( int target_hos
       transl = h_n_node_to_map;
       
       time_mark = getRealTime();
-      CUDAMALLOCCTRL( "&d_aux_array", &d_aux_array, aux_size * sizeof( uint ) );
+      CUDAREALLOCIFSMALLER( "&d_ru_storage_", &d_ru_storage_, aux_size * sizeof( uint ) );
       
-      CUDAMALLOCCTRL( "&d_aux_array", &d_aux_array, aux_size * sizeof( uint ) );
-
       //printf("n_node_map: %d, new_n_node_map: %d, transl: %d, node_map_block_size: %d, aux_size: %d, i0: %d, i1: %d\n",
       //     n_node_map, new_n_node_map, transl, node_map_block_size_, aux_size, i0, i1);
       
@@ -2377,10 +2367,10 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectTarget( int target_hos
 	//printf("i_left: %ld, i_right: %ld, n_elem: %ld\n", i_left, i_right, n_elem);
 	if (n_elem > 0) {
 	  copyBlockArrayToArrayKernel<<< ( n_elem + 1023 ) / 1024, 1024 >>>
-	    (d_aux_array, d_node_map, node_map_block_size_, i_left, n_elem);
+	    ((uint*)d_ru_storage_, d_node_map, node_map_block_size_, i_left, n_elem);
 	  CUDASYNC;
 	  copyArrayToBlockArrayKernel<<< ( n_elem + 1023 ) / 1024, 1024 >>>
-	    (d_node_map, d_aux_array, node_map_block_size_, i_left + transl, n_elem);
+	    (d_node_map, (uint*)d_ru_storage_, node_map_block_size_, i_left + transl, n_elem);
 	  CUDASYNC;
 	}
 	i_right -= aux_size;
@@ -2609,9 +2599,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectTarget( int target_hos
 	i0 = n_down_1;
 	transl = check_to_be_mapped;
 
-	CUDAMALLOCCTRL( "&d_aux_array", &d_aux_array, aux_size * sizeof( uint ) );
-      
-	CUDAMALLOCCTRL( "&d_aux_array", &d_aux_array, aux_size * sizeof( uint ) );
+	CUDAMALLOCCTRL( "&d_ru_storage_", &d_ru_storage_, aux_size * sizeof( uint ) );
 
 	//printf("n_node_map: %d, new_n_node_map: %d, transl: %d, node_map_block_size: %d, aux_size: %d, i0: %d, i1: %d\n",
 	//     n_node_map, new_n_node_map, transl, node_map_block_size_, aux_size, i0, i1);
@@ -2625,10 +2613,10 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectTarget( int target_hos
 	  //printf("i_left: %ld, i_right: %ld, n_elem: %ld\n", i_left, i_right, n_elem);
 	  if (n_elem > 0) {
 	    copyBlockArrayToArrayKernel<<< ( n_elem + 1023 ) / 1024, 1024 >>>
-	      (d_aux_array, d_check_node_map, node_map_block_size_, i_left, n_elem);
+	      ((uint*)d_ru_storage_, d_check_node_map, node_map_block_size_, i_left, n_elem);
 	    CUDASYNC;
 	    copyArrayToBlockArrayKernel<<< ( n_elem + 1023 ) / 1024, 1024 >>>
-	      (d_check_node_map, d_aux_array, node_map_block_size_, i_left + transl, n_elem);
+	      (d_check_node_map, (uint*)d_ru_storage_, node_map_block_size_, i_left + transl, n_elem);
 	    CUDASYNC;
 	  }
 	  i_right -= aux_size;
@@ -2864,10 +2852,6 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectTarget( int target_hos
       CUDAFREECTRL( "h_check_node_map[]", h_check_node_map[ib] );
     }
     delete[] h_check_node_map;
-  }
-
-  if (d_aux_array != nullptr) {
-    CUDAFREECTRL( "d_aux_array", d_aux_array );
   }
 
   return 0;

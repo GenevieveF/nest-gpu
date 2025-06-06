@@ -70,6 +70,8 @@ size_t mem_max_;
 int verbose_;
 } // namespace cuda_error_ns
 
+void* d_ru_storage_;
+
 enum KernelFloatParamIndexes
 {
   i_time_resolution = 0,
@@ -239,6 +241,8 @@ NESTGPU::NESTGPU()
   SpikeNumAllgather_recv_packed_ = 0;
  
   first_simulation_flag_ = true;
+
+  CUDAMALLOCCTRL("&d_ru_storage_",&d_ru_storage_, 80000000);
 
 }
 
