@@ -68,6 +68,8 @@ std::map< void*, size_t > alloc_map_;
 size_t mem_used_;
 size_t mem_max_;
 int verbose_;
+double alloc_time_;
+double free_time_;  
 } // namespace cuda_error_ns
 
 void* d_ru_storage_;
@@ -189,6 +191,8 @@ NESTGPU::NESTGPU()
 
   cuda_error_ns::mem_used_ = 0;
   cuda_error_ns::mem_max_ = 0;
+  cuda_error_ns::alloc_time_ = 0;
+  cuda_error_ns::free_time_ = 0;
 
 
   max_spike_buffer_size_ = 20;
@@ -637,6 +641,8 @@ NESTGPU::PrintTimers()
     std::cout << HostIdStr() << "  GetSpike_time: " << GetSpike_time_ << "\n";
     std::cout << HostIdStr() << "  SpikeReset_time: " << SpikeReset_time_ << "\n";
     std::cout << HostIdStr() << "  ExternalSpikeReset_time: " << ExternalSpikeReset_time_ << "\n";
+    std::cout << HostIdStr() << "  CUDA_global_memory_allocation_time: " << cuda_error_ns::alloc_time_ << "\n";
+    std::cout << HostIdStr() << "  CUDA_global_memory_deallocation_time: " << cuda_error_ns::free_time_ << "\n";
   }
 
   if ( n_hosts_ > 1 && verbosity_level_ >= 4 )

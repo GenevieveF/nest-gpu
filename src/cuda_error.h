@@ -27,6 +27,7 @@
 #include "ngpu_exception.h"
 #include <map>
 #include <stdio.h>
+#include "getRealTime.h"
 
 #ifdef HAVE_MPI
 #include <mpi.h>
@@ -38,6 +39,8 @@ extern std::map< void*, size_t > alloc_map_;
 extern size_t mem_used_;
 extern size_t mem_max_;
 extern int verbose_;
+extern double alloc_time_;
+extern double free_time_;  
 } // namespace cuda_error_ns
 
 inline int
@@ -103,9 +106,6 @@ mapCUDAMemFree( void* dev_pt )
 
 
 
-
-
-
 inline bool
 mapCUDAMemReallocIfSmaller( void* dev_pt, size_t n_bytes )
 {
@@ -134,18 +134,6 @@ mapCUDAMemReallocIfSmaller( void* dev_pt, size_t n_bytes )
   }
   return true;
 }
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 #define gpuErrchk( ans )                      \
@@ -198,6 +186,7 @@ gpuAssert( cudaError_t code, const char* file, int line, bool abort = true )
 
 #define CUDAMALLOCCTRL( str, dev_pt, n_bytes )                                   \
   {                                                                              \
+    double time_mark = getRealTime();           				 \
     if ( cuda_error_ns::verbose_ > 0 )                                           \
     {                                                                            \
       printMPIRank();                                                            \
@@ -209,9 +198,11 @@ gpuAssert( cudaError_t code, const char* file, int line, bool abort = true )
     }                                                                            \
     gpuAssert( cudaMalloc( dev_pt, n_bytes ), __FILE__, __LINE__ );              \
     mapCUDAMemAlloc( *dev_pt, n_bytes );                                         \
+    cuda_error_ns::alloc_time_ += ( getRealTime() - time_mark );                 \
   }
 #define CUDAFREECTRL( str, dev_pt )                                                                \
   {                                                                                                \
+    double time_mark = getRealTime();                                   	                   \
     if ( cuda_error_ns::verbose_ > 0 )                                                             \
     {                                                                                              \
       printMPIRank();                                                                              \
@@ -219,10 +210,12 @@ gpuAssert( cudaError_t code, const char* file, int line, bool abort = true )
     }                                                                                              \
     gpuAssert( cudaFree( dev_pt ), __FILE__, __LINE__ );                                           \
     mapCUDAMemFree( dev_pt );                                                                      \
+    cuda_error_ns::free_time_ += ( getRealTime() - time_mark );                                    \
   }
 
 #define CUDAREALLOCIFSMALLER( str, dev_pt, n_bytes )                                                 \
   {                                                                                                  \
+    double time_mark = getRealTime();                                   	                     \
     bool flag = mapCUDAMemReallocIfSmaller( *dev_pt, n_bytes );                                      \
     if ( flag ) {                                                                                    \
       gpuAssert( cudaFree( dev_pt ), __FILE__, __LINE__ );                                           \
@@ -233,6 +226,7 @@ gpuAssert( cudaError_t code, const char* file, int line, bool abort = true )
         printf( "Reallocating device memory pointed by %s in at %s:%d\n", str, __FILE__, __LINE__ ); \
       }                                                                                              \
     }                                                                                                \
+    cuda_error_ns::alloc_time_ += ( getRealTime() - time_mark );                                     \
   }                                                                                                  \
 
 //#define ACTIVATE_PRINT_TIME
