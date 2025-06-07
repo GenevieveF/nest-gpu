@@ -438,7 +438,7 @@ template < class ConnKeyT, class ConnStructT >
 int
 ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectionMapInit()
 {
-  node_map_block_size_ = 10000; // initialize node map block size
+  node_map_block_size_ = 128*1024; //10000; // initialize node map block size
 
   cudaMemcpyToSymbol( node_map_block_size, &node_map_block_size_, sizeof( uint ) );
 

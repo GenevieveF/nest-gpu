@@ -2493,7 +2493,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::init()
   // member variables initialization
   distribution_ = NULL;
 
-  conn_block_size_ = 10000000;
+  conn_block_size_ = 16*1024*1024; // 10000000;
 
   n_conn_ = 0;
 
@@ -2530,7 +2530,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::init()
 
   // The arrays that map remote source nodes to local spike buffers
   // are organized in blocks having block size:
-  node_map_block_size_ = 100000;
+  node_map_block_size_ = 128*1024; // 100000;
 
   // number of elements in the map for each source host
   // n_remote_source_node_map[i_source_host]
