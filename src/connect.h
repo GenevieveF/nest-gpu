@@ -85,7 +85,29 @@ public:
   double MapSourceNodeSequence_time_;
   double RemoteConnectTarget_time_;
   double RemoteConnectSource_time_;
-
+  double RemoteConnectSource1_time_;
+  double RemoteConnectSource2_time_;
+  double RemoteConnectSource3_time_;
+  double RemoteConnectSource4_time_;
+  double RemoteConnectSource5_time_;
+  double RemoteConnectSource6_time_;
+  double RemoteConnectSource7_time_;
+  double RemoteConnectSource8_time_;
+  double RemoteConnectSource9_time_;
+  double RemoteConnectSource10_time_;
+  double RemoteConnectSource11_time_;
+  double RemoteConnectSource12_time_;
+  double RemoteConnectSource13_time_;
+  double RemoteConnectSource14_time_;
+  double RemoteConnectSource15_time_;
+  double RemoteConnectSource16_time_;
+  double RemoteConnectSource17_time_;
+  double RemoteConnectSource18_time_;
+  double RemoteConnectSource19_time_;
+  double RemoteConnectSource20_time_;
+  double RemoteConnectSource21_time_;
+  double RemoteConnectSourceTot_time_;
+  
   // the following is activated only for special testings on node maps
   bool check_node_maps_;
 
@@ -444,6 +466,29 @@ public:
       RemoteConnectTarget_time_ = 0;
       RemoteConnectSource_time_ = 0;
 
+      RemoteConnectSource1_time_ = 0;
+      RemoteConnectSource2_time_ = 0;
+      RemoteConnectSource3_time_ = 0;
+      RemoteConnectSource4_time_ = 0;
+      RemoteConnectSource5_time_ = 0;
+      RemoteConnectSource6_time_ = 0;
+      RemoteConnectSource7_time_ = 0;
+      RemoteConnectSource8_time_ = 0;
+      RemoteConnectSource9_time_ = 0;
+      RemoteConnectSource10_time_ = 0;
+      RemoteConnectSource11_time_ = 0;
+      RemoteConnectSource12_time_ = 0;
+      RemoteConnectSource13_time_ = 0;
+      RemoteConnectSource14_time_ = 0;
+      RemoteConnectSource15_time_ = 0;
+      RemoteConnectSource16_time_ = 0;
+      RemoteConnectSource17_time_ = 0;
+      RemoteConnectSource18_time_ = 0;
+      RemoteConnectSource19_time_ = 0;
+      RemoteConnectSource20_time_ = 0;
+      RemoteConnectSource21_time_ = 0;
+      RemoteConnectSourceTot_time_ = 0;   
+      
       return 0;
   }
 };

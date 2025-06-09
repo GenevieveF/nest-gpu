@@ -685,6 +685,29 @@ NESTGPU::PrintTimers()
     std::cout << HostIdStr() << "  RemoteConnectTarget_time: " << conn_->RemoteConnectTarget_time_ << "\n";
     std::cout << HostIdStr() << "  RemoteConnectSource_time: " << conn_->RemoteConnectSource_time_ << "\n";
 
+    std::cout << HostIdStr() << "  RemoteConnectSource1_time: " << conn_->RemoteConnectSource1_time_ << "\n";
+    std::cout << HostIdStr() << "  RemoteConnectSource2_time: " << conn_->RemoteConnectSource2_time_ << "\n";
+    std::cout << HostIdStr() << "  RemoteConnectSource3_time: " << conn_->RemoteConnectSource3_time_ << "\n";
+    std::cout << HostIdStr() << "  RemoteConnectSource4_time: " << conn_->RemoteConnectSource4_time_ << "\n";
+    std::cout << HostIdStr() << "  RemoteConnectSource5_time: " << conn_->RemoteConnectSource5_time_ << "\n";
+    std::cout << HostIdStr() << "  RemoteConnectSource6_time: " << conn_->RemoteConnectSource6_time_ << "\n";
+    std::cout << HostIdStr() << "  RemoteConnectSource7_time: " << conn_->RemoteConnectSource7_time_ << "\n";
+    std::cout << HostIdStr() << "  RemoteConnectSource8_time: " << conn_->RemoteConnectSource8_time_ << "\n";
+    std::cout << HostIdStr() << "  RemoteConnectSource9_time: " << conn_->RemoteConnectSource9_time_ << "\n";
+    std::cout << HostIdStr() << "  RemoteConnectSource10_time: " << conn_->RemoteConnectSource10_time_ << "\n";
+    std::cout << HostIdStr() << "  RemoteConnectSource11_time: " << conn_->RemoteConnectSource11_time_ << "\n";
+    std::cout << HostIdStr() << "  RemoteConnectSource12_time: " << conn_->RemoteConnectSource12_time_ << "\n";
+    std::cout << HostIdStr() << "  RemoteConnectSource13_time: " << conn_->RemoteConnectSource13_time_ << "\n";
+    std::cout << HostIdStr() << "  RemoteConnectSource14_time: " << conn_->RemoteConnectSource14_time_ << "\n";
+    std::cout << HostIdStr() << "  RemoteConnectSource15_time: " << conn_->RemoteConnectSource15_time_ << "\n";
+    std::cout << HostIdStr() << "  RemoteConnectSource16_time: " << conn_->RemoteConnectSource16_time_ << "\n";
+    std::cout << HostIdStr() << "  RemoteConnectSource17_time: " << conn_->RemoteConnectSource17_time_ << "\n";
+    std::cout << HostIdStr() << "  RemoteConnectSource18_time: " << conn_->RemoteConnectSource18_time_ << "\n";
+    std::cout << HostIdStr() << "  RemoteConnectSource19_time: " << conn_->RemoteConnectSource19_time_ << "\n";
+    std::cout << HostIdStr() << "  RemoteConnectSource20_time: " << conn_->RemoteConnectSource20_time_ << "\n";
+    std::cout << HostIdStr() << "  RemoteConnectSource21_time: " << conn_->RemoteConnectSource21_time_ << "\n";
+    std::cout << HostIdStr() << "  RemoteConnectSourceTot_time: " << conn_->RemoteConnectSourceTot_time_ << "\n";
+    
   }
 
   if ( verbosity_level_ >= 1 )
