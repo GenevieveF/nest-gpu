@@ -1400,7 +1400,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectSource( int source_hos
     time_mark6 = getRealTime();
     RemoteConnectSource6_time_ += (time_mark6 - time_mark5);
 
-    std::cout << "Updating remote node maps on host " << this_host_ << std::endl;
+    //std::cout << "Updating remote node maps on host " << this_host_ << std::endl;
     // if source nodes are defined by a sequence, find the first and last index of the sequence
     inode_t i_source_0 = firstNodeIndex(source);
     inode_t i_source_1 = i_source_0 + n_source - 1;
@@ -1584,7 +1584,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectSource( int source_hos
     }
     time_mark17 = getRealTime();
 
-    std::cout << "Finished udating remote node maps on host " << this_host_ << std::endl;
+    //std::cout << "Finished udating remote node maps on host " << this_host_ << std::endl;
   }
   else {
     time_mark17 = getRealTime();
@@ -2384,7 +2384,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectTarget( int target_hos
   
   // The following section is used only if the source nodes are defined by a sequence and if the connection rule prescribe that they are all used
   if (!check_node_maps_ && isSequence(source) && conn_spec.use_all_remote_source_nodes_) {
-    std::cout << "Updating local source node maps on host " << this_host_ << std::endl;
+    //std::cout << "Updating local source node maps on host " << this_host_ << std::endl;
     // if source nodes are defined by a sequence, find the first and last index of the sequence
     inode_t i_source_0 = firstNodeIndex(source);
     inode_t i_source_1 = i_source_0 + n_source - 1;
@@ -2519,7 +2519,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectTarget( int target_hos
       }
 
     }
-    std::cout << "Finished udating local source node maps on host " << this_host_ << std::endl;
+    //std::cout << "Finished udating local source node maps on host " << this_host_ << std::endl;
   }
   else {
     // Allocate arrays of size n_used_source_nodes
