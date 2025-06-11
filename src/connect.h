@@ -801,14 +801,13 @@ class ConnectionTemplate : public Connection
 
   // temporary array of integers having size equal to the number of source nodes
   uint* d_local_node_index_; // [n_source]; // only on target host
+
+  // store position result from a search or similar things
+  int64_t *d_position_;
   
   // auxiliary memory block
   //uint *d_aux_array_;
 
-
-
-
-  
   //////////////////////////////////////////////////
   // class ConnectionTemplate methods
   //////////////////////////////////////////////////
@@ -2668,6 +2667,9 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::init()
 
   // temporary array of integers having size equal to the number of source nodes
   d_local_node_index_ = nullptr; // [n_source]; // only on target host
+
+  // store position result from a search or similar things
+  d_position_ = nullptr;
   
   // auxiliary memory block
   //uint *d_aux_array_ = nullptr;

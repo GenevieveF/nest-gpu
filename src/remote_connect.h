@@ -2940,17 +2940,6 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
         throw ngpu_exception( "sizeof(ConnKeyT) must be either 4 or 8 bytes"
 			      " in  _ConnectDistrubutedFixedIndegree" );
   }
-  //////////////////////////////////////////////////////////////////////////////////////////////////////////
-  // Pointers to memory allocated dynamically in GPU memory, must be eventually freed at the end
-
-  // memory for temporary storage for sort functions
-  void* d_storage = nullptr;
-  
-  // 64 bit integer to store the search result
-  int64_t *d_position = nullptr;
-
-
-  //////////////////////////////////////////////////////////////////////////////////////////////////////////
   
   if (first_connection_flag_ == true) {
     remoteConnectionMapInit();
@@ -3123,22 +3112,17 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
     
   // Allocating auxiliary GPU memory
   int64_t sort_storage_bytes = 0;
-  if (d_storage != nullptr) {
-    CUDAFREECTRL( "d_storage", d_storage );
-    d_storage = nullptr;
-  }
+  
   copass_sort::sort< ConnKeyT, ConnStructT >
     (&conn_key_vect_[ib0], &conn_struct_vect_[ib0], n_new_conn_tot,
-     conn_block_size_, d_storage, sort_storage_bytes, i_conn0 );
-  //printf( "storage bytes: %ld\n", sort_storage_bytes );
-  CUDAMALLOCCTRL( "&d_storage", &d_storage, sort_storage_bytes );
+     conn_block_size_, nullptr, sort_storage_bytes, i_conn0 );
+  printf( "xxx storage bytes: %ld\n", sort_storage_bytes );
+  CUDAREALLOCIFSMALLER( "&d_ru_storage_", &d_ru_storage_, sort_storage_bytes, sort_storage_bytes / 4 );
 
   // printf( "Sorting...\n" );
   copass_sort::sort< ConnKeyT, ConnStructT >
     (&conn_key_vect_[ib0], &conn_struct_vect_[ib0], n_new_conn_tot,
-     conn_block_size_, d_storage, sort_storage_bytes, i_conn0 );
-  CUDAFREECTRL( "d_storage", d_storage );
-  d_storage = nullptr;
+     conn_block_size_, d_ru_storage_, sort_storage_bytes, i_conn0 );
   
   ///////////////////////////////////////////////////////////////////
   // Partition the new connections according to the source host
@@ -3188,14 +3172,14 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
       }
 
       // allocate a 64 bit integer to store the search result
-      CUDAMALLOCCTRL( "&d_position", &d_position, sizeof(int64_t) );
+      CUDAREALLOCIFSMALLER( "&d_position_", &d_position_, sizeof(int64_t), 0 );
       
       if (sizeof(ConnKeyT)==8) { // 64 bit
 	// perform search in an array of 64 bit unsigned integers
 	// Find number of elements < val in a sorted array array[i+1]>=array[i]
 	search_down< unsigned long long, 1024 > <<< 1, 1024 >>>
 	  ((unsigned long long*)conn_key_vect_[ ib ] + i_conn0,
-	   n_block_conn, value, d_position);
+	   n_block_conn, value, d_position_);
 	DBGCUDASYNC;
       }
       else {
@@ -3203,11 +3187,11 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
 	// Find number of elements < val in a sorted array array[i+1]>=array[i]
 	search_down< unsigned int, 1024 > <<< 1, 1024 >>>
 	  ((unsigned int*)conn_key_vect_[ ib ] + i_conn0,
-	   n_block_conn, value, d_position);
+	   n_block_conn, value, d_position_);
 	DBGCUDASYNC;
       }
       // Copy position from GPU to CPU memory
-      gpuErrchk( cudaMemcpy( &h_position, d_position, sizeof( int64_t ), cudaMemcpyDeviceToHost ) );
+      gpuErrchk( cudaMemcpy( &h_position, d_position_, sizeof( int64_t ), cudaMemcpyDeviceToHost ) );
       // check if found
       if (h_position < n_block_conn) {
 	ib1 = ib; // next partition search should start from current block, where current partition ends
@@ -3298,19 +3282,6 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
   for (int ish=0; ish<n_source_host; ish++) {
     freeNodeArrayFromDevice(d_source_arr[ish]);
   }
-
-
-   //////////////////////////////////////////////////////////////////////////////////////////////////////////
-  // If necessary , free pointers to memory allocated dynamically in GPU memory
-  if (d_storage != nullptr) {
-    CUDAFREECTRL( "d_storage", d_storage );
-  }
-
-  if (d_position != nullptr) {
-    CUDAFREECTRL( "d_position", d_position );
-  }
-
-  ////////////////////////////////////////////////////////////////////////////////////////////////////////////
  
   return ret;
 }

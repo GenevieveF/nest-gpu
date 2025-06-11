@@ -443,7 +443,9 @@ NESTGPU::Calibrate()
   {
     std::cout << HostIdStr() << "Calibrating ...\n";
   }
-
+  
+  CUDAFREECTRL("d_ru_storage_", d_ru_storage_);
+  
   gpuErrchk( cudaMemcpyToSymbol( NESTGPUTimeResolution, &time_resolution_, sizeof( float ) ) );
 
   gpuErrchk( cudaMemcpyToSymbol( have_remote_spike_mul, &remote_spike_mul_, sizeof( bool ) ) );

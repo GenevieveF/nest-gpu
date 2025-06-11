@@ -255,8 +255,8 @@ gpuAssert( cudaError_t code, const char* file, int line, bool abort = true )
     bool alloc_flag;							                             \
     mapCUDAMemReallocIfSmaller( *dev_pt, n_bytes, n_bytes_margin, free_flag, alloc_flag );	     \
     if ( free_flag ) {                                                                               \
-      gpuAssert( cudaFree( dev_pt ), __FILE__, __LINE__ );                                           \
-      mapCUDAMemFree( dev_pt );                                                                      \
+      gpuAssert( cudaFree( *dev_pt ), __FILE__, __LINE__ );                                           \
+      mapCUDAMemFree( *dev_pt );                                                                      \
     }                                                                                                \
     if ( alloc_flag ) {                                                                              \
       gpuAssert( cudaMalloc( dev_pt, n_bytes + n_bytes_margin ), __FILE__, __LINE__ );               \
