@@ -27,6 +27,7 @@
 
 #ifndef NGPUEXCEPTION_H
 #define NGPUEXCEPTION_H
+#include <iostream>
 #include <cstring>
 #include <exception>
 #include <string>
