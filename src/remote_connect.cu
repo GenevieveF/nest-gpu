@@ -237,6 +237,7 @@ searchNodeIndexInMapKernel( uint** node_map,
   }
 }
 
+
 // kernel that searches node indexes not in map
 // flags nodes not yet mapped and counts them
 __global__ void
@@ -246,6 +247,7 @@ searchNodeIndexNotInMapKernel( uint** node_map,
 			       bool* node_to_map,
 			       uint* n_node_to_map,
 			       uint n_node,
+			       bool use_image_node_map,
 			       uint** image_node_map,
 			       uint *mapped_local_node_index
 			       )
@@ -271,7 +273,7 @@ searchNodeIndexNotInMapKernel( uint** node_map,
       node_to_map[ i_node ] = true;
       atomicAdd( n_node_to_map, 1 );
     }
-    else if (image_node_map != nullptr) {
+    else if (use_image_node_map) {
       mapped_local_node_index[ i_node ] = image_node_map[i_block][i_in_block];
     }
   }
@@ -288,6 +290,7 @@ insertNodesInMapKernel( uint** node_map,
 			bool* node_to_map,
 			uint* i_node_to_map,
 			uint n_node,
+			bool use_image_node_map,
 			uint** image_node_map,
 			uint image_node_map_i0,
 			uint* i_sorted_arr,
@@ -300,7 +303,7 @@ insertNodesInMapKernel( uint** node_map,
   {
     return;
   }
-  if ( image_node_map != nullptr  && !node_to_map[ i_node ] )
+  if ( use_image_node_map  && !node_to_map[ i_node ] )
   {
     local_node_index[ i_sorted_arr[ i_node ] ] = mapped_local_node_index[ i_node ];
     return;
@@ -313,7 +316,7 @@ insertNodesInMapKernel( uint** node_map,
     uint i_block = i_node_map / node_map_block_size;
     uint i = i_node_map % node_map_block_size;
     node_map[ i_block ][ i ] = sorted_node_index[ i_node ];
-    if ( image_node_map != nullptr ) {
+    if ( use_image_node_map ) {
       image_node_map[ i_block ][ i ] = image_node_map_i0 + pos;
       local_node_index[i_sorted_arr[i_node]] = image_node_map_i0 + pos;
     }
@@ -332,6 +335,7 @@ __global__ void extractLocalImageIndexOfMappedSourceNodes(
 							  uint n_elem,
 							  uint i_node_0,
 							  bool *node_mapped,
+							  bool use_image_node_map,
 							  uint** image_node_map,
 							  uint* local_node_index
 							  )
@@ -348,7 +352,7 @@ __global__ void extractLocalImageIndexOfMappedSourceNodes(
 
   uint i_node_rel = node_map[ i_block ][ i ] - i_node_0;
   node_mapped[i_node_rel] = true;
-  if (image_node_map != nullptr) {
+  if ( use_image_node_map ) {
     local_node_index[i_node_rel] = image_node_map[ i_block ][ i ];
   }
 }
@@ -365,6 +369,7 @@ mapRemoteSourceNodesToLocalImagesKernel(
 					uint n_node,
 					uint i_node_map_0,
 					uint i_node_0,
+					bool use_image_node_map,
 					uint** image_node_map,
 					uint image_node_map_i0,
 					uint* i_node_to_map,
@@ -382,7 +387,7 @@ mapRemoteSourceNodesToLocalImagesKernel(
   uint i = i_node_map % node_map_block_size;
   node_map[ i_block ][ i ] = i_node_0 + i_node;
 
-  if (image_node_map != nullptr) {
+  if ( use_image_node_map ) {
     if ( !node_mapped[ i_node ] ) { // node has to be mapped
       // get and atomically increase index of node to be mapped
       uint pos = atomicAdd( i_node_to_map, 1 );

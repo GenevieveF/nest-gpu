@@ -408,7 +408,7 @@ def run_simulation():
     time_start = perf_counter_ns()
 
     ngpu.SetKernelStatus({
-        "verbosity_level": 5,
+        "verbosity_level": 1,
         "rnd_seed": params["seed"],
         "time_resolution": params['dt'],
         "max_node_n_bits": 31,

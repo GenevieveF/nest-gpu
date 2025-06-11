@@ -336,6 +336,7 @@ public:
   SetVerbosityLevel( int verbosity_level )
   {
     verbosity_level_ = verbosity_level;
+    verbose_print_ns::verbosity_level_ = verbosity_level;
     return 0;
   }
 
@@ -611,7 +612,7 @@ public:
 
   int SimulationStep();
 
-  int PrintTimers();
+  int PrintTimers(int verbosity_level = 5);
 
   int ConnectMpiInit();
 

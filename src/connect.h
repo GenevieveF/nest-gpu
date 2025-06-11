@@ -85,29 +85,7 @@ public:
   double MapSourceNodeSequence_time_;
   double RemoteConnectTarget_time_;
   double RemoteConnectSource_time_;
-  double RemoteConnectSource1_time_;
-  double RemoteConnectSource2_time_;
-  double RemoteConnectSource3_time_;
-  double RemoteConnectSource4_time_;
-  double RemoteConnectSource5_time_;
-  double RemoteConnectSource6_time_;
-  double RemoteConnectSource7_time_;
-  double RemoteConnectSource8_time_;
-  double RemoteConnectSource9_time_;
-  double RemoteConnectSource10_time_;
-  double RemoteConnectSource11_time_;
-  double RemoteConnectSource12_time_;
-  double RemoteConnectSource13_time_;
-  double RemoteConnectSource14_time_;
-  double RemoteConnectSource15_time_;
-  double RemoteConnectSource16_time_;
-  double RemoteConnectSource17_time_;
-  double RemoteConnectSource18_time_;
-  double RemoteConnectSource19_time_;
-  double RemoteConnectSource20_time_;
-  double RemoteConnectSource21_time_;
-  double RemoteConnectSourceTot_time_;
-  
+
   // the following is activated only for special testings on node maps
   bool check_node_maps_;
 
@@ -466,29 +444,6 @@ public:
       RemoteConnectTarget_time_ = 0;
       RemoteConnectSource_time_ = 0;
 
-      RemoteConnectSource1_time_ = 0;
-      RemoteConnectSource2_time_ = 0;
-      RemoteConnectSource3_time_ = 0;
-      RemoteConnectSource4_time_ = 0;
-      RemoteConnectSource5_time_ = 0;
-      RemoteConnectSource6_time_ = 0;
-      RemoteConnectSource7_time_ = 0;
-      RemoteConnectSource8_time_ = 0;
-      RemoteConnectSource9_time_ = 0;
-      RemoteConnectSource10_time_ = 0;
-      RemoteConnectSource11_time_ = 0;
-      RemoteConnectSource12_time_ = 0;
-      RemoteConnectSource13_time_ = 0;
-      RemoteConnectSource14_time_ = 0;
-      RemoteConnectSource15_time_ = 0;
-      RemoteConnectSource16_time_ = 0;
-      RemoteConnectSource17_time_ = 0;
-      RemoteConnectSource18_time_ = 0;
-      RemoteConnectSource19_time_ = 0;
-      RemoteConnectSource20_time_ = 0;
-      RemoteConnectSource21_time_ = 0;
-      RemoteConnectSourceTot_time_ = 0;   
-      
       return 0;
   }
 };
@@ -804,6 +759,56 @@ class ConnectionTemplate : public Connection
 
   // local ids of the host groups to which each node should send spikes
   std::vector< std::vector< int > > node_target_host_group_; // [n_local_nodes ][num. of target host groups ]
+
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // Pointers to memory allocated dynamically in GPU memory, must be eventually freed at the end
+  
+  // flags to mark if nodes are actually used in a connection
+  // used only if use_all_remote_source_nodes_ is false, otherwise it remains equal to nullptr
+  uint* d_source_node_flag_; // [n_source]
+
+  // number of nodes actually used in new connections
+  uint* d_n_used_source_nodes_;
+
+  // Define unsorted and sorted arrays of source node indexes
+  uint* d_unsorted_source_node_index_; // [n_used_source_nodes];
+  uint* d_sorted_source_node_index_;   // [n_used_source_nodes];
+  
+  // i_source_arr are the positions in the arrays source_node_flag and local_node_index
+  uint* d_i_unsorted_source_arr_; // [n_used_source_nodes];
+  uint* d_i_sorted_source_arr_;   // [n_used_source_nodes];
+
+  //////////////////////////////
+  // Array of remote source node map blocks and local node image blocks 
+  uint** d_node_map_;
+  uint** d_image_node_map_tmp_;
+
+  // Boolean array for flagging remote source nodes not yet mapped across nodes used in some connection
+  bool* d_node_to_map_;
+  
+  // Boolean array for flagging remote source nodes already mapped across all source nodes
+  bool* d_node_mapped_;
+
+  // Number of nodes to be mapped
+  uint* d_n_node_to_map_;
+
+  // Array of indexes of already mapped nodes local image indexes
+  uint *d_mapped_local_node_index_;
+
+  // Index of the nodes to be mapped
+  uint* d_i_node_to_map_;
+
+  // temporary array of integers having size equal to the number of source nodes
+  uint* d_local_node_index_; // [n_source]; // only on target host
+  
+  // auxiliary memory block
+  //uint *d_aux_array_;
+
+
+
+
+  
   //////////////////////////////////////////////////
   // class ConnectionTemplate methods
   //////////////////////////////////////////////////
@@ -2580,48 +2585,93 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::init()
   // number of elements in the map for each source host
   // n_remote_source_node_map[i_source_host]
   // with i_source_host = 0, ..., n_hosts-1 excluding this host itself
-  //d_n_remote_source_node_map_ = NULL;
+  //d_n_remote_source_node_map_ = nullptr;
 
-  d_image_node_map_ = NULL;
+  d_image_node_map_ = nullptr;
 
   // Arrays that map local source nodes to remote image nodes
   // number of elements in the map for each target host
   // n_local_source_node_map[i_target_host]
   // with i_target_host = 0, ..., n_hosts-1 excluding this host itself
-  d_n_local_source_node_map_ = NULL;
+  d_n_local_source_node_map_ = nullptr;
 
   // local_source_node_map[i_target_host][i_block][i]
-  d_local_source_node_map_ = NULL;
+  d_local_source_node_map_ = nullptr;
 
   // number of remote target hosts on which each local node
   // has outgoing connections
-  d_n_target_hosts_ = NULL; // [n_nodes]
+  d_n_target_hosts_ = nullptr; // [n_nodes]
   // target hosts for the node i_node
-  d_node_target_hosts_ = NULL; // [i_node]
+  d_node_target_hosts_ = nullptr; // [i_node]
   // target host map indexes for the node i_node
-  d_node_target_host_i_map_ = NULL; // [i_node]
+  d_node_target_host_i_map_ = nullptr; // [i_node]
 
   // Boolean array with one boolean value for each connection rule
   // - true if the rule always creates at least one outgoing connection
   // from each source node (one_to_one, all_to_all, fixed_outdegree)
   // - false otherwise (fixed_indegree, fixed_total_number, pairwise_bernoulli)
-  use_all_source_nodes_ = NULL; // [n_connection_rules]:
+  use_all_source_nodes_ = nullptr; // [n_connection_rules]:
 
   //////////////////////////////////////////////////
   // reverse-connection-related member variables
   //////////////////////////////////////////////////
   rev_conn_flag_ = false;
   spike_time_flag_ = false;
-  d_conn_spike_time_ = NULL;
+  d_conn_spike_time_ = nullptr;
 
   n_rev_conn_ = 0;
-  d_rev_spike_num_ = NULL;
-  d_rev_spike_target_ = NULL;
-  d_rev_spike_n_conn_ = NULL;
-  d_rev_conn_ = NULL;             //[i] i=0,..., n_rev_conn_ - 1;
-  d_target_rev_conn_size_ = NULL; //[i] i=0,..., n_neuron-1;
-  d_target_rev_conn_ = NULL;      //[i][j] j=0,...,rev_conn_size_[i]-1
+  d_rev_spike_num_ = nullptr;
+  d_rev_spike_target_ = nullptr;
+  d_rev_spike_n_conn_ = nullptr;
+  d_rev_conn_ = nullptr;             //[i] i=0,..., n_rev_conn_ - 1;
+  d_target_rev_conn_size_ = nullptr; //[i] i=0,..., n_neuron-1;
+  d_target_rev_conn_ = nullptr;      //[i][j] j=0,...,rev_conn_size_[i]-1
 
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // Pointers to memory allocated dynamically in GPU memory, must be eventually freed at the end
+  
+  // flags to mark if nodes are actually used in a connection
+  // used only if use_all_remote_source_nodes_ is false, otherwise it remains equal to nullptr
+  d_source_node_flag_ = nullptr; // [n_source]
+
+  // number of nodes actually used in new connections
+  d_n_used_source_nodes_ = nullptr;
+
+  // Define unsorted and sorted arrays of source node indexes
+  d_unsorted_source_node_index_ = nullptr; // [n_used_source_nodes];
+  d_sorted_source_node_index_ = nullptr;   // [n_used_source_nodes];
+  
+  // i_source_arr are the positions in the arrays source_node_flag and local_node_index
+  d_i_unsorted_source_arr_ = nullptr; // [n_used_source_nodes];
+  d_i_sorted_source_arr_ = nullptr;   // [n_used_source_nodes];
+
+  //////////////////////////////
+  // Array of remote source node map blocks and local node image blocks 
+  d_node_map_ = nullptr;
+  d_image_node_map_tmp_ = nullptr;
+
+  // Boolean array for flagging remote source nodes not yet mapped across nodes used in some connection
+  d_node_to_map_ = nullptr;
+  
+  // Boolean array for flagging remote source nodes already mapped across all source nodes
+  d_node_mapped_ = nullptr;
+
+  // Number of nodes to be mapped
+  d_n_node_to_map_ = nullptr;
+
+  // Array of indexes of already mapped nodes local image indexes
+  d_mapped_local_node_index_ = nullptr;
+
+  // Index of the nodes to be mapped
+  d_i_node_to_map_ = nullptr;
+
+  // temporary array of integers having size equal to the number of source nodes
+  d_local_node_index_ = nullptr; // [n_source]; // only on target host
+  
+  // auxiliary memory block
+  //uint *d_aux_array_ = nullptr;
+  
   initConnRandomGenerator();
 
   _setSpikeBufferAlgo( INPUT_SPIKE_BUFFER_ALGO );
@@ -2635,7 +2685,7 @@ template < class ConnKeyT, class ConnStructT >
 int
 ConnectionTemplate< ConnKeyT, ConnStructT >::calibrate()
 {
-  if ( conn_source_ids_size_ > 0 && d_conn_source_ids_ != NULL )
+  if ( conn_source_ids_size_ > 0 && d_conn_source_ids_ != nullptr )
   {
     CUDAFREECTRL( "d_conn_source_ids_", d_conn_source_ids_ );
   }
@@ -2684,7 +2734,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::freeConnectionKey()
   for ( uint ib = 0; ib < conn_key_vect_.size(); ib++ )
   {
     ConnKeyT* d_key_pt = conn_key_vect_[ ib ];
-    if ( d_key_pt != NULL )
+    if ( d_key_pt != nullptr )
     {
       CUDAFREECTRL( "d_key_pt", d_key_pt );
     }
@@ -2827,28 +2877,28 @@ template < class ConnKeyT, class ConnStructT >
 int
 ConnectionTemplate< ConnKeyT, ConnStructT >::organizeConnections( inode_t n_node )
 {
-  timeval startTV;
-  timeval endTV;
-  CUDASYNC;
-  gettimeofday( &startTV, NULL );
+  //timeval startTV;
+  //timeval endTV;
+  //CUDASYNC;
+  //gettimeofday( &startTV, NULL );
 
-  if ( d_conn_storage_ != NULL )
+  if ( d_conn_storage_ != nullptr )
   {
     CUDAFREECTRL( "d_conn_storage_", d_conn_storage_ );
   }
 
   if ( n_conn_ > 0 )
   {
-    printf( "Allocating auxiliary GPU memory...\n" );
+    // printf( "Allocating auxiliary GPU memory...\n" );
     int64_t sort_storage_bytes = 0;
-    void* d_sort_storage = NULL;
+    void* d_sort_storage = nullptr;
     copass_sort::sort< ConnKeyT, ConnStructT >
       (conn_key_vect_.data(), conn_struct_vect_.data(), n_conn_,
        conn_block_size_, d_sort_storage, sort_storage_bytes, 0 );
-    printf( "storage bytes: %ld\n", sort_storage_bytes );
+    // printf( "storage bytes: %ld\n", sort_storage_bytes );
     CUDAMALLOCCTRL( "&d_sort_storage", &d_sort_storage, sort_storage_bytes );
 
-    printf( "Sorting...\n" );
+    // printf( "Sorting...\n" );
     copass_sort::sort< ConnKeyT, ConnStructT >
       (conn_key_vect_.data(), conn_struct_vect_.data(), n_conn_,
        conn_block_size_, d_sort_storage, sort_storage_bytes, 0 );
@@ -2882,8 +2932,8 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::organizeConnections( inode_t n_node
     {
       size_t storage_bytes = 0;
       size_t storage_bytes1 = 0;
-      void* d_storage = NULL;
-      printf( "Indexing connection groups...\n" );
+      void* d_storage = nullptr;
+      // printf( "Indexing connection groups...\n" );
 
       int* d_conn_group_iconn0_mask;
       CUDAMALLOCCTRL( "&d_conn_group_iconn0_mask", &d_conn_group_iconn0_mask, conn_block_size_ * sizeof( int ) );
@@ -2915,7 +2965,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::organizeConnections( inode_t n_node
       CUDAMALLOCCTRL( "&d_idx0_offset", &d_idx0_offset, sizeof( inode_t ) );
       gpuErrchk( cudaMemset( d_idx0_offset, 0, sizeof( inode_t ) ) );
 
-      ConnKeyT* conn_key_subarray_prev = NULL;
+      ConnKeyT* conn_key_subarray_prev = nullptr;
       for ( int ib = 0; ib < k; ib++ )
       {
         int64_t n_block_conn = ib < ( k - 1 ) ? conn_block_size_ : n_conn_ - conn_block_size_ * ( k - 1 );
@@ -2946,7 +2996,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::organizeConnections( inode_t n_node
         CUDASYNC;
       }
       gpuErrchk( cudaMemcpy( &tot_conn_group_num_, d_iconn0_offset, sizeof( iconngroup_t ), cudaMemcpyDeviceToHost ) );
-      printf( "Total number of connection groups: %d\n", tot_conn_group_num_ );
+      // printf( "Total number of connection groups: %d\n", tot_conn_group_num_ );
 
       if ( tot_conn_group_num_ > 0 )
       {
@@ -2954,7 +3004,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::organizeConnections( inode_t n_node
         CUDAMALLOCCTRL( "&d_conn_group_num", &d_conn_group_num, n_node * sizeof( iconngroup_t ) );
         gpuErrchk( cudaMemset( d_conn_group_num, 0, sizeof( iconngroup_t ) ) );
 
-        ConnKeyT* conn_key_subarray_prev = NULL;
+        ConnKeyT* conn_key_subarray_prev = nullptr;
         gpuErrchk( cudaMemset( d_iconn0_offset, 0, sizeof( iconngroup_t ) ) );
 
         CUDAMALLOCCTRL(
@@ -3078,11 +3128,11 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::organizeConnections( inode_t n_node
     gpuErrchk( cudaMemset( d_conn_group_idx0_, 0, ( n_node + 1 ) * sizeof( iconngroup_t ) ) );
   }
 
-  gettimeofday( &endTV, NULL );
-  long time =
-    ( long ) ( ( endTV.tv_sec * 1000000.0 + endTV.tv_usec ) - ( startTV.tv_sec * 1000000.0 + startTV.tv_usec ) );
-  printf( "%-40s%.2f ms\n", "Time: ", ( double ) time / 1000. );
-  printf( "Done\n" );
+  //gettimeofday( &endTV, NULL );
+  //long time =
+  //  ( long ) ( ( endTV.tv_sec * 1000000.0 + endTV.tv_usec ) - ( startTV.tv_sec * 1000000.0 + startTV.tv_usec ) );
+  //printf( "%-40s%.2f ms\n", "Time: ", ( double ) time / 1000. );
+  //printf( "Done\n" );
   
   return 0;
 }
@@ -3129,7 +3179,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_Connect( curandGenerator_t& gen,
   }
 
   first_connection_flag_ = false;
-  if ( d_conn_storage_ == NULL )
+  if ( d_conn_storage_ == nullptr )
   {
     CUDAMALLOCCTRL( "&d_conn_storage_", &d_conn_storage_, conn_block_size_ * sizeof( uint ) );
   }
@@ -3202,7 +3252,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::reallocConnSourceIds( int64_t n_con
   {
     return 0;
   }
-  if ( conn_source_ids_size_ > 0 && d_conn_source_ids_ != NULL )
+  if ( conn_source_ids_size_ > 0 && d_conn_source_ids_ != nullptr )
   {
     CUDAFREECTRL( "d_conn_source_ids_", d_conn_source_ids_ );
   }
@@ -4038,8 +4088,8 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::getConnections( inode_t* i_source_p
   int syn_group,
   int64_t* n_conn )
 {
-  int64_t* h_conn_ids = NULL;
-  int64_t* d_conn_ids = NULL;
+  int64_t* h_conn_ids = nullptr;
+  int64_t* d_conn_ids = nullptr;
   uint64_t n_src_tgt = ( uint64_t ) n_source * n_target;
   int64_t n_conn_ids = 0;
 
@@ -4071,7 +4121,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::getConnections( inode_t* i_source_p
     uint64_t* d_src_tgt_conn_cumul;
     CUDAMALLOCCTRL( "&d_src_tgt_conn_cumul", &d_src_tgt_conn_cumul, ( n_src_tgt + 1 ) * sizeof( uint64_t ) );
     // Determine temporary device storage requirements
-    void* d_storage = NULL;
+    void* d_storage = nullptr;
     size_t storage_bytes = 0;
     //<BEGIN-CLANG-TIDY-SKIP>//
     cub::DeviceScan::ExclusiveSum( d_storage, storage_bytes, d_src_tgt_conn_num, d_src_tgt_conn_cumul, n_src_tgt + 1 );
@@ -4307,29 +4357,37 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::organizeDirectConnections( void*& d
   void*& d_poiss_thresh )
 {
   int k = conn_key_vect_.size();
-  ConnKeyT** conn_key_array = conn_key_vect_.data();
-  CUDAMALLOCCTRL( "&d_poiss_key_array_data_pt", &d_poiss_key_array_data_pt, k * sizeof( ConnKeyT* ) );
-  gpuErrchk( cudaMemcpy( d_poiss_key_array_data_pt, conn_key_array, k * sizeof( ConnKeyT* ), cudaMemcpyHostToDevice ) );
+  if (k > 0) {
+    ConnKeyT** conn_key_array = conn_key_vect_.data();
+    CUDAMALLOCCTRL( "&d_poiss_key_array_data_pt", &d_poiss_key_array_data_pt, k * sizeof( ConnKeyT* ) );
+    gpuErrchk( cudaMemcpy( d_poiss_key_array_data_pt, conn_key_array, k * sizeof( ConnKeyT* ), cudaMemcpyHostToDevice ) );
   
-  regular_block_array< ConnKeyT > h_poiss_subarray[ k ];
-  for ( int i = 0; i < k; i++ )
-  {
-    h_poiss_subarray[ i ].h_data_pt = conn_key_array;
-    h_poiss_subarray[ i ].data_pt = ( ConnKeyT** ) d_poiss_key_array_data_pt;
-    h_poiss_subarray[ i ].block_size = conn_block_size_;
-    h_poiss_subarray[ i ].offset = i * conn_block_size_;
-    h_poiss_subarray[ i ].size = i < k - 1 ? conn_block_size_ : n_conn_ - ( k - 1 ) * conn_block_size_;
+    regular_block_array< ConnKeyT > h_poiss_subarray[ k ];
+    for ( int i = 0; i < k; i++ )
+      {
+	h_poiss_subarray[ i ].h_data_pt = conn_key_array;
+	h_poiss_subarray[ i ].data_pt = ( ConnKeyT** ) d_poiss_key_array_data_pt;
+	h_poiss_subarray[ i ].block_size = conn_block_size_;
+	h_poiss_subarray[ i ].offset = i * conn_block_size_;
+	h_poiss_subarray[ i ].size = i < k - 1 ? conn_block_size_ : n_conn_ - ( k - 1 ) * conn_block_size_;
+      }
+
+    CUDAMALLOCCTRL( "&d_poiss_subarray", &d_poiss_subarray, k * sizeof( regular_block_array< ConnKeyT > ) );
+    gpuErrchk( cudaMemcpyAsync(
+			       d_poiss_subarray, h_poiss_subarray, k * sizeof( regular_block_array< ConnKeyT > ), cudaMemcpyHostToDevice ) );
+
+    CUDAMALLOCCTRL( "&d_poiss_num", &d_poiss_num, 2 * k * sizeof( int64_t ) );
+    CUDAMALLOCCTRL( "&d_poiss_sum", &d_poiss_sum, 2 * sizeof( int64_t ) );
+    CUDAMALLOCCTRL( "&d_poiss_thresh", &d_poiss_thresh, 2 * sizeof( ConnKeyT ) );
   }
-
-  CUDAMALLOCCTRL( "&d_poiss_subarray", &d_poiss_subarray, k * sizeof( regular_block_array< ConnKeyT > ) );
-  gpuErrchk( cudaMemcpyAsync(
-    d_poiss_subarray, h_poiss_subarray, k * sizeof( regular_block_array< ConnKeyT > ), cudaMemcpyHostToDevice ) );
-
-  CUDAMALLOCCTRL( "&d_poiss_num", &d_poiss_num, 2 * k * sizeof( int64_t ) );
-  CUDAMALLOCCTRL( "&d_poiss_sum", &d_poiss_sum, 2 * sizeof( int64_t ) );
-
-  CUDAMALLOCCTRL( "&d_poiss_thresh", &d_poiss_thresh, 2 * sizeof( ConnKeyT ) );
-
+  else {
+    d_poiss_key_array_data_pt = nullptr;
+    d_poiss_subarray = nullptr;
+    d_poiss_num = nullptr;
+    d_poiss_sum = nullptr;
+    d_poiss_thresh = nullptr;
+  }
+  
   return 0;
 }
 
@@ -4344,6 +4402,9 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::buildDirectConnections( inode_t i_n
   void*& d_poiss_key_array )
 {
   int k = conn_key_vect_.size();
+  if (k==0) {
+    return 0;
+  }
 
   ConnKeyT** conn_key_array = ( ConnKeyT** ) conn_key_vect_.data();
   ConnKeyT h_poiss_thresh[ 2 ];
@@ -4475,7 +4536,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::buildDirectConnections( inode_t i_n
 
   MaxDelay< ConnKeyT > max_op; // comparison operator used by Reduce function
   // Determine temporary device storage requirements
-  void* d_temp_storage = NULL;
+  void* d_temp_storage = nullptr;
   size_t temp_storage_bytes = 0;
   ConnKeyT init_delay_key = 0;
   
@@ -4509,7 +4570,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::buildDirectConnections( inode_t i_n
   //	    << h_max_delay_key << "\n";
 
   max_delay = getConnDelay( h_max_delay_key );
-  printf( "Max delay of direct (poisson generator) connections: %d\n", max_delay );
+  // printf( "Max delay of direct (poisson generator) connections: %d\n", max_delay );
   CUDAMALLOCCTRL( "&d_mu_arr", &d_mu_arr, n_node * max_delay * sizeof( float ) );
   gpuErrchk( cudaMemset( d_mu_arr, 0, n_node * max_delay * sizeof( float ) ) );
 
@@ -4549,7 +4610,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::revSpikeInit( uint n_spike_buffers 
   // Allocate array for cumulative sum
   CUDAMALLOCCTRL( "&d_target_rev_conn_cumul", &d_target_rev_conn_cumul, ( n_spike_buffers + 1 ) * sizeof( int64_t ) );
   // Determine temporary device storage requirements
-  void* d_temp_storage = NULL;
+  void* d_temp_storage = nullptr;
   size_t temp_storage_bytes = 0;
   //<BEGIN-CLANG-TIDY-SKIP>//
   cub::DeviceScan::ExclusiveSum(

@@ -67,6 +67,15 @@ printMPIRank()
 inline void
 mapCUDAMemAlloc( void* dev_pt, size_t n_bytes )
 {
+  if (dev_pt == 0)
+  {
+    throw ngpu_exception( "Error in mapCUDAMemAlloc: cannot store null pointer in CUDA memory allocation map." );
+  }
+  if (n_bytes == 0)
+  {
+    throw ngpu_exception( "Error in mapCUDAMemAlloc: number of bytes must be > 0 in CUDA memory allocation." );
+  }
+
   cuda_error_ns::alloc_map_.insert( { dev_pt, n_bytes } );
   cuda_error_ns::mem_used_ += n_bytes;
 
@@ -106,33 +115,44 @@ mapCUDAMemFree( void* dev_pt )
 
 
 
-inline bool
-mapCUDAMemReallocIfSmaller( void* dev_pt, size_t n_bytes )
+inline void
+mapCUDAMemReallocIfSmaller( void* dev_pt, size_t n_bytes, size_t n_bytes_margin, bool &free_flag, bool &alloc_flag )
 {
+  if (n_bytes == 0)
+  {
+    throw ngpu_exception( "Error in mapCUDAMemReallocIfSmaller: number of bytes must be > 0 in CUDA memory reallocation." );
+  }
   if ( cuda_error_ns::alloc_map_.find( dev_pt ) == cuda_error_ns::alloc_map_.end() )
   {
-    throw ngpu_exception( "CUDA error: pointer not found in mapCUDAMemReallocIfSmaller." );
+    free_flag = false;
+    alloc_flag = true;
+    //cuda_error_ns::alloc_map_.insert( { dev_pt, n_bytes + n_bytes_margin} );
+    //cuda_error_ns::mem_used_ += n_bytes + n_bytes_margin;
   }
-  size_t n_bytes_old = cuda_error_ns::alloc_map_.at( dev_pt );
-  if (n_bytes_old >= n_bytes) {
-    return false;
+  else {
+    size_t n_bytes_old = cuda_error_ns::alloc_map_.at( dev_pt );
+    if (n_bytes_old >= n_bytes) {
+      free_flag = false;
+      alloc_flag = false;
+      return;
+    }
+    free_flag = true;
+    alloc_flag = true;
+    //cuda_error_ns::alloc_map_[dev_pt] = n_bytes + n_bytes_margin;
+    //cuda_error_ns::mem_used_ += n_bytes + n_bytes_margin - n_bytes_old;
   }
-  cuda_error_ns::alloc_map_[dev_pt] = n_bytes;
-  cuda_error_ns::mem_used_ += n_bytes - n_bytes_old;
-  
-  if ( cuda_error_ns::mem_used_ > cuda_error_ns::mem_max_ )
-  {
-    cuda_error_ns::mem_max_ = cuda_error_ns::mem_used_;
-  }
+  //if ( cuda_error_ns::mem_used_ > cuda_error_ns::mem_max_ )
+  //{
+  //  cuda_error_ns::mem_max_ = cuda_error_ns::mem_used_;
+  //}
 
-  if ( cuda_error_ns::verbose_ > 0 )
-  {
-    printMPIRank();
-    printf( "GPU memory usage: used = %.3f, max used = %.3f\n",
-      ( float ) cuda_error_ns::mem_used_ / 1024.0 / 1024.0,
-      ( float ) cuda_error_ns::mem_max_ / 1024.0 / 1024.0 );
-  }
-  return true;
+  //if ( cuda_error_ns::verbose_ > 0 )
+  //{
+  //  printMPIRank();
+  //  printf( "GPU memory usage: used = %.3f, max used = %.3f\n",
+  //    ( float ) cuda_error_ns::mem_used_ / 1024.0 / 1024.0,
+  //    ( float ) cuda_error_ns::mem_max_ / 1024.0 / 1024.0 );
+  //}
 }
 
 
@@ -153,23 +173,23 @@ gpuAssert( cudaError_t code, const char* file, int line, bool abort = true )
   }
 }
 
-#define CUDA_CALL( x )                                  \
-  do                                                    \
-  {                                                     \
-    if ( ( x ) != cudaSuccess )                         \
-    {                                                   \
-      printf( "Error at %s:%d\n", __FILE__, __LINE__ ); \
-      throw ngpu_exception( "CUDA error" );             \
-    }                                                   \
+#define CUDA_CALL( x )                                           \
+  do                                                             \
+  {                                                              \
+    if ( ( x ) != cudaSuccess )                                  \
+    {                                                            \
+      fprintf( stderr, "Error at %s:%d\n", __FILE__, __LINE__ ); \
+      throw ngpu_exception( "CUDA error" );                      \
+    }                                                            \
   } while ( 0 )
-#define CURAND_CALL( x )                                \
-  do                                                    \
-  {                                                     \
-    if ( ( x ) != CURAND_STATUS_SUCCESS )               \
-    {                                                   \
-      printf( "Error at %s:%d\n", __FILE__, __LINE__ ); \
-      throw ngpu_exception( "CUDA error" );             \
-    }                                                   \
+#define CURAND_CALL( x )                                         \
+  do                                                             \
+  {                                                              \
+    if ( ( x ) != CURAND_STATUS_SUCCESS )                        \
+    {                                                            \
+      fprintf( stderr, "Error at %s:%d\n", __FILE__, __LINE__ ); \
+      throw ngpu_exception( "CUDA error" );                      \
+    }                                                            \
   } while ( 0 )
 
 //#define DEBUG_CUDA_SYNC
@@ -184,21 +204,26 @@ gpuAssert( cudaError_t code, const char* file, int line, bool abort = true )
   gpuErrchk( cudaPeekAtLastError() ); \
   gpuErrchk( cudaDeviceSynchronize() );
 
-#define CUDAMALLOCCTRL( str, dev_pt, n_bytes )                                   \
-  {                                                                              \
-    double time_mark = getRealTime();           				 \
-    if ( cuda_error_ns::verbose_ > 0 )                                           \
-    {                                                                            \
-      printMPIRank();                                                            \
-      printf( "Allocating %lld bytes pointed by %s in device memory at %s:%d\n", \
-        ( unsigned long long ) n_bytes,                                          \
-        str,                                                                     \
-        __FILE__,                                                                \
-        __LINE__ );                                                              \
-    }                                                                            \
-    gpuAssert( cudaMalloc( dev_pt, n_bytes ), __FILE__, __LINE__ );              \
-    mapCUDAMemAlloc( *dev_pt, n_bytes );                                         \
-    cuda_error_ns::alloc_time_ += ( getRealTime() - time_mark );                 \
+#define CUDAMALLOCCTRL( str, dev_pt, n_bytes )                                     \
+  {                                                                                \
+    double time_mark = getRealTime();           				   \
+    if ( (int64_t)(n_bytes) <= 0 ) {					\
+      fprintf( stderr, "Error in CUDAMALLOCCTRL at %s:%d\n", __FILE__, __LINE__ ); \
+      fprintf( stderr, "Number of bytes must be > 0 in CUDA memory allocation." ); \
+      throw ngpu_exception( "CUDA error" );                                        \
+    }                                                                              \
+    if ( cuda_error_ns::verbose_ > 0 )                                             \
+    {                                                                              \
+      printMPIRank();                                                              \
+      printf( "Allocating %lld bytes pointed by %s in device memory at %s:%d\n",   \
+        ( unsigned long long ) n_bytes,                                            \
+        str,                                                                       \
+        __FILE__,                                                                  \
+        __LINE__ );                                                                \
+    }                                                                              \
+    gpuAssert( cudaMalloc( dev_pt, n_bytes ), __FILE__, __LINE__ );                \
+    mapCUDAMemAlloc( *dev_pt, n_bytes );                                           \
+    cuda_error_ns::alloc_time_ += ( getRealTime() - time_mark );                   \
   }
 #define CUDAFREECTRL( str, dev_pt )                                                                \
   {                                                                                                \
@@ -213,13 +238,29 @@ gpuAssert( cudaError_t code, const char* file, int line, bool abort = true )
     cuda_error_ns::free_time_ += ( getRealTime() - time_mark );                                    \
   }
 
-#define CUDAREALLOCIFSMALLER( str, dev_pt, n_bytes )                                                 \
+#define CUDAREALLOCIFSMALLER( str, dev_pt, n_bytes, n_bytes_margin )			             \
   {                                                                                                  \
     double time_mark = getRealTime();                                   	                     \
-    bool flag = mapCUDAMemReallocIfSmaller( *dev_pt, n_bytes );                                      \
-    if ( flag ) {                                                                                    \
+    if ( (int64_t)(n_bytes) <= 0 ) {					\
+      fprintf( stderr, "Error in CUDAREALLOCIFSMALLER at %s:%d\n", __FILE__, __LINE__ );             \
+      fprintf( stderr, "Number of bytes must be > 0 in CUDA memory reallocation." );                 \
+      throw ngpu_exception( "CUDA error" );                                                          \
+    }                                                                                                \
+    if ( (int64_t)(n_bytes_margin) < 0 ) {				\
+      fprintf( stderr, "Error in CUDAREALLOCIFSMALLER at %s:%d\n", __FILE__, __LINE__ );             \
+      fprintf( stderr, "Number of byte margin must be >= 0 in CUDA memory reallocation." );          \
+      throw ngpu_exception( "CUDA error" );                                                          \
+    }                                                                                                \
+    bool free_flag;                                   	                                             \
+    bool alloc_flag;							                             \
+    mapCUDAMemReallocIfSmaller( *dev_pt, n_bytes, n_bytes_margin, free_flag, alloc_flag );	     \
+    if ( free_flag ) {                                                                               \
       gpuAssert( cudaFree( dev_pt ), __FILE__, __LINE__ );                                           \
-      gpuAssert( cudaMalloc( dev_pt, n_bytes ), __FILE__, __LINE__ );                                \
+      mapCUDAMemFree( dev_pt );                                                                      \
+    }                                                                                                \
+    if ( alloc_flag ) {                                                                              \
+      gpuAssert( cudaMalloc( dev_pt, n_bytes + n_bytes_margin ), __FILE__, __LINE__ );               \
+      mapCUDAMemAlloc( *dev_pt, n_bytes + n_bytes_margin );				             \
       if ( cuda_error_ns::verbose_ > 0 )                                                             \
       {                                                                                              \
         printMPIRank();                                                                              \
@@ -234,7 +275,7 @@ gpuAssert( cudaError_t code, const char* file, int line, bool abort = true )
 #define PRINT_TIME                              \
   gpuErrchk( cudaPeekAtLastError() );           \
   gpuErrchk( cudaDeviceSynchronize() );	        \
-  std::cout << "Time from start at " << __FILE__ << ":" << __LINE__ << "\t" << getRealTime() - start_real_time_ << std::endl;
+  std::cout << "Time from start at " << __FILE__ << ":" << __LINE__ << "\t" << getRealTime() - start_real_time_ << "\n";
 #else
 #define PRINT_TIME
 #endif

@@ -45,23 +45,23 @@ ConnectionTemplate< conn12b_key, conn12b_struct >::_setMaxNodeNBits( int max_nod
   }
   // maximum number of bits used to represent node index
   max_node_nbits_ = max_node_nbits;
-  // std::cout << "max_node_nbits_ " << max_node_nbits_ << std::endl;
+  // std::cout << "max_node_nbits_ " << max_node_nbits_ << "\n";
   
   // maximum number of bits used to represent receptor port index
   // and synapse group index
   max_port_syn_nbits_ = 32 - max_node_nbits_;
-  // std::cout << "max_port_syn_nbits_ " << max_port_syn_nbits_ << std::endl;
+  // std::cout << "max_port_syn_nbits_ " << max_port_syn_nbits_ << "\n";
   
   // maximum number of bits used to represent delays
   max_delay_nbits_ = max_port_syn_nbits_;
-  // std::cout << "max_delay_nbits_ " << max_delay_nbits_  << std::endl;
+  // std::cout << "max_delay_nbits_ " << max_delay_nbits_  << "\n";
   // maximum number of bits used to represent receptor port index
   max_port_nbits_ = max_port_syn_nbits_ - max_syn_nbits_ - 1;
   if (max_port_nbits_ < 0) {
     max_port_nbits_ = 0;
     max_syn_nbits_ = max_port_syn_nbits_ - 1;
   } 
-  // std::cout << "max_port_nbits_ " << max_port_nbits_  << std::endl;
+  // std::cout << "max_port_nbits_ " << max_port_nbits_  << "\n";
   
   // bit mask used to extract port and synapse group index
   port_syn_mask_ = ( 1 << max_port_syn_nbits_ ) - 1;
@@ -111,14 +111,14 @@ ConnectionTemplate< conn12b_key, conn12b_struct >::_setMaxSynNBits( int max_syn_
 {
   // maximum number of bits used to represent synapse group index
   max_syn_nbits_ = max_syn_nbits;
-  // std::cout << "max_syn_nbits_ " << max_syn_nbits_ << std::endl;
+  // std::cout << "max_syn_nbits_ " << max_syn_nbits_ << "\n";
   // maximum number of bits used to represent receptor port index
   max_port_nbits_ = max_port_syn_nbits_ - max_syn_nbits_ - 1;
   if (max_port_nbits_ < 0) {
     max_port_nbits_ = 0;
     max_port_syn_nbits_ = max_syn_nbits_ + 1;
   } 
-  // std::cout << "max_port_nbits_ " << max_port_nbits_ << std::endl;
+  // std::cout << "max_port_nbits_ " << max_port_nbits_ << "\n";
     
   // bit mask used to extract synapse group index
   syn_mask_ = ( 1 << max_syn_nbits_ ) - 1;

@@ -72,6 +72,12 @@ double alloc_time_;
 double free_time_;  
 } // namespace cuda_error_ns
 
+namespace verbose_print_ns
+{
+  int verbosity_level_;
+}
+
+
 void* d_ru_storage_;
 
 enum KernelFloatParamIndexes
@@ -211,8 +217,10 @@ NESTGPU::NESTGPU()
 
   on_exception_ = ON_EXCEPTION_EXIT;
 
-  verbosity_level_ = 4;
+  verbosity_level_ = 1;
   cuda_error_ns::verbose_ = 0;
+  verbose_print_ns::verbosity_level_ = verbosity_level_;
+  
   print_time_ = false;
   remove_conn_key_ = false;
 
@@ -399,10 +407,10 @@ NESTGPU::CreateNodeGroup( uint n_nodes, int n_ports )
   }
   if ( n_ports > max_n_ports && max_n_ports_warning_)
   {
-    std::cout << "Warning: node group number of receptor ports larger than maximum " << max_n_ports << std::endl;
+    std::cout << "Warning: node group number of receptor ports larger than maximum " << max_n_ports << "\n";
     std::cout << "\tConnections can be made only to ports with index smaller than the maximum\n";
     std::cout << "\tunless the number of bits reserved to represent the port is increased.\n";
-    std::cout << "\tThis warning message can be suppressed by setting the kernel parameter max_n_ports_warning to false" << std::endl;     
+    std::cout << "\tThis warning message can be suppressed by setting the kernel parameter max_n_ports_warning to false" << "\n";     
   }
   int i_group = node_vect_.size() - 1;
   node_group_map_.insert( node_group_map_.end(), n_nodes, i_group );
@@ -556,7 +564,11 @@ NESTGPU::Calibrate()
   gpuErrchk( cudaMemcpyToSymbolAsync( NESTGPUTimeResolution, &time_resolution_, sizeof( float ) ) );
 
   build_real_time_ = getRealTime();
-  PrintTimers();
+  end_real_time_ = build_real_time_;
+  
+  if ( verbosity_level_ >= 1 ) {
+    PrintTimers(verbosity_level_);
+  }
   
   return 0;
 }
@@ -581,7 +593,10 @@ NESTGPU::Simulate()
     }
     SimulationStep();
   }
-  PrintTimers();
+  end_real_time_ = getRealTime();
+  if ( verbosity_level_ >= 1 ) {
+    PrintTimers(verbosity_level_);
+  }
 
   return 0;
 }
@@ -618,16 +633,13 @@ NESTGPU::StartSimulation()
 }
 
 int
-NESTGPU::PrintTimers()
+NESTGPU::PrintTimers(int verbosity_level)
 {
-  if ( verbosity_level_ >= 2 && print_time_ == true )
-  {
+  if ( verbosity_level >= 2 && print_time_) {
     printf( "\r[%.2lf %%] Model time: %.3lf ms", 100.0 * ( neural_time_ - neur_t0_ ) / sim_time_, neural_time_ );
   }
 
-  end_real_time_ = getRealTime();
-
-  if ( verbosity_level_ >= 3 )
+  if ( verbosity_level >= 3 )
   {
     std::cout << "\n";
     std::cout << HostIdStr() << "  SpikeBufferUpdate_time: " << SpikeBufferUpdate_time_ << "\n";
@@ -645,7 +657,7 @@ NESTGPU::PrintTimers()
     std::cout << HostIdStr() << "  CUDA_global_memory_deallocation_time: " << cuda_error_ns::free_time_ << "\n";
   }
 
-  if ( n_hosts_ > 1 && verbosity_level_ >= 4 )
+  if ( n_hosts_ > 1 && verbosity_level >= 4 )
   {
     std::cout << HostIdStr() << "  SendSpikeToRemote_comm_time: " << SendSpikeToRemote_comm_time_ << "\n";
     std::cout << HostIdStr() << "  RecvSpikeFromRemote_comm_time: " << RecvSpikeFromRemote_comm_time_ << "\n";
@@ -655,13 +667,13 @@ NESTGPU::PrintTimers()
       std::cout << HostIdStr() << "  MpiBitPack_time: " << MpiBitPack_time_ << "\n";
       std::cout << HostIdStr() << "  MpiBitUnpack_time: " << MpiBitUnpack_time_ << "\n";
 
-      std::cout << HostIdStr() << "  SpikeNumAllgather_send_: " << SpikeNumAllgather_send_ << std::endl;
-      std::cout << HostIdStr() << "  SpikeNumAllgather_send_packed_: " << SpikeNumAllgather_send_packed_ << std::endl;
-      std::cout << HostIdStr() << "  SpikeNumAllgather_recv_: " << SpikeNumAllgather_recv_ << std::endl;
-      std::cout << HostIdStr() << "  SpikeNumAllgather_recv_packed_: " << SpikeNumAllgather_recv_packed_ << std::endl;
+      std::cout << HostIdStr() << "  SpikeNumAllgather_send_: " << SpikeNumAllgather_send_ << "\n";
+      std::cout << HostIdStr() << "  SpikeNumAllgather_send_packed_: " << SpikeNumAllgather_send_packed_ << "\n";
+      std::cout << HostIdStr() << "  SpikeNumAllgather_recv_: " << SpikeNumAllgather_recv_ << "\n";
+      std::cout << HostIdStr() << "  SpikeNumAllgather_recv_packed_: " << SpikeNumAllgather_recv_packed_ << "\n";
     }
   }
-  if ( n_hosts_ > 1 && verbosity_level_ >= 5 )
+  if ( n_hosts_ > 1 && verbosity_level >= 5 )
   {
     std::cout << HostIdStr() << "  InsertHostGroupSourceNode_time: " << conn_->InsertHostGroupSourceNode_time_ << "\n";
     std::cout << HostIdStr() << "  ConnectRemoteConnectSource_time: " << conn_->ConnectRemoteConnectSource_time_ << "\n";
@@ -685,32 +697,9 @@ NESTGPU::PrintTimers()
     std::cout << HostIdStr() << "  RemoteConnectTarget_time: " << conn_->RemoteConnectTarget_time_ << "\n";
     std::cout << HostIdStr() << "  RemoteConnectSource_time: " << conn_->RemoteConnectSource_time_ << "\n";
 
-    std::cout << HostIdStr() << "  RemoteConnectSource1_time: " << conn_->RemoteConnectSource1_time_ << "\n";
-    std::cout << HostIdStr() << "  RemoteConnectSource2_time: " << conn_->RemoteConnectSource2_time_ << "\n";
-    std::cout << HostIdStr() << "  RemoteConnectSource3_time: " << conn_->RemoteConnectSource3_time_ << "\n";
-    std::cout << HostIdStr() << "  RemoteConnectSource4_time: " << conn_->RemoteConnectSource4_time_ << "\n";
-    std::cout << HostIdStr() << "  RemoteConnectSource5_time: " << conn_->RemoteConnectSource5_time_ << "\n";
-    std::cout << HostIdStr() << "  RemoteConnectSource6_time: " << conn_->RemoteConnectSource6_time_ << "\n";
-    std::cout << HostIdStr() << "  RemoteConnectSource7_time: " << conn_->RemoteConnectSource7_time_ << "\n";
-    std::cout << HostIdStr() << "  RemoteConnectSource8_time: " << conn_->RemoteConnectSource8_time_ << "\n";
-    std::cout << HostIdStr() << "  RemoteConnectSource9_time: " << conn_->RemoteConnectSource9_time_ << "\n";
-    std::cout << HostIdStr() << "  RemoteConnectSource10_time: " << conn_->RemoteConnectSource10_time_ << "\n";
-    std::cout << HostIdStr() << "  RemoteConnectSource11_time: " << conn_->RemoteConnectSource11_time_ << "\n";
-    std::cout << HostIdStr() << "  RemoteConnectSource12_time: " << conn_->RemoteConnectSource12_time_ << "\n";
-    std::cout << HostIdStr() << "  RemoteConnectSource13_time: " << conn_->RemoteConnectSource13_time_ << "\n";
-    std::cout << HostIdStr() << "  RemoteConnectSource14_time: " << conn_->RemoteConnectSource14_time_ << "\n";
-    std::cout << HostIdStr() << "  RemoteConnectSource15_time: " << conn_->RemoteConnectSource15_time_ << "\n";
-    std::cout << HostIdStr() << "  RemoteConnectSource16_time: " << conn_->RemoteConnectSource16_time_ << "\n";
-    std::cout << HostIdStr() << "  RemoteConnectSource17_time: " << conn_->RemoteConnectSource17_time_ << "\n";
-    std::cout << HostIdStr() << "  RemoteConnectSource18_time: " << conn_->RemoteConnectSource18_time_ << "\n";
-    std::cout << HostIdStr() << "  RemoteConnectSource19_time: " << conn_->RemoteConnectSource19_time_ << "\n";
-    std::cout << HostIdStr() << "  RemoteConnectSource20_time: " << conn_->RemoteConnectSource20_time_ << "\n";
-    std::cout << HostIdStr() << "  RemoteConnectSource21_time: " << conn_->RemoteConnectSource21_time_ << "\n";
-    std::cout << HostIdStr() << "  RemoteConnectSourceTot_time: " << conn_->RemoteConnectSourceTot_time_ << "\n";
-    
   }
 
-  if ( verbosity_level_ >= 1 )
+  if ( verbosity_level >= 1 )
   {
     std::cout << HostIdStr() << "Building time: " << ( build_real_time_ - start_real_time_ ) << "\n";
     std::cout << HostIdStr() << "Simulation time: " << ( end_real_time_ - build_real_time_ ) << "\n";

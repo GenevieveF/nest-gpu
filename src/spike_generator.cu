@@ -87,7 +87,12 @@ spike_generator::Init( int i_node_0, int n_node, int /*n_port*/, int i_group )
   spike_mul_vect_.clear();
   spike_mul_vect_.insert( spike_mul_vect_.begin(), n_node, empty_vect );
 
-  CUDAMALLOCCTRL( "&param_arr_", &param_arr_, n_node_ * n_param_ * sizeof( float ) );
+  if (n_param_ > 0) {    
+    CUDAMALLOCCTRL( "&param_arr_", &param_arr_, n_node_ * n_param_ * sizeof( float ) );
+  }
+  else {
+    param_arr_ = nullptr;
+  }
 
   // SetScalParam(0, n_node, "origin", 0.0);
 

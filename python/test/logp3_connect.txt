@@ -8,9 +8,6 @@
 
  Homepage: https://github.com/nest/nest-gpu
 
-Allocating auxiliary GPU memory...
-Sorting...
-Done
 ########################################
 Even to all
 {'index': 0, 'source': 0, 'target': 1, 'port': 0, 'syn_group': 0, 'delay': 1.0, 'weight': 100.0}

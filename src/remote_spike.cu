@@ -443,8 +443,14 @@ NESTGPU::ExternalSpikeInit()
   std::vector < uint > host_group_node_id_flat(ntg_tot, 0);
   std::vector < uint* > hd_ExternalNodeTargetHostGroupId(n_node, nullptr);
   std::vector < uint* > hd_ExternalHostGroupNodeId(n_node, nullptr);
-  CUDAMALLOCCTRL("&hd_ExternalNodeTargetHostGroupId[0]", &hd_ExternalNodeTargetHostGroupId[0], ntg_tot*sizeof(uint));
-  CUDAMALLOCCTRL("&hd_ExternalHostGroupNodeId[0]", &hd_ExternalHostGroupNodeId[0], ntg_tot*sizeof(uint));
+  if (ntg_tot > 0) {
+    CUDAMALLOCCTRL("&hd_ExternalNodeTargetHostGroupId[0]", &hd_ExternalNodeTargetHostGroupId[0], ntg_tot*sizeof(uint));
+    CUDAMALLOCCTRL("&hd_ExternalHostGroupNodeId[0]", &hd_ExternalHostGroupNodeId[0], ntg_tot*sizeof(uint));
+  }
+  else {
+    hd_ExternalNodeTargetHostGroupId[0] = nullptr;
+    hd_ExternalHostGroupNodeId[0] = nullptr;
+  }
   //uint pos = 0;
 
   auto node_target_host_group_it = node_target_host_group_flat.begin();
@@ -468,15 +474,24 @@ NESTGPU::ExternalSpikeInit()
       host_group_node_id_pt += ntg;
     }
     if (i_node < n_node - 1) {
-      hd_ExternalNodeTargetHostGroupId[i_node + 1] = hd_ExternalNodeTargetHostGroupId[i_node] + ntg;
-      hd_ExternalHostGroupNodeId[i_node + 1] = hd_ExternalHostGroupNodeId[i_node] + ntg;
+      if (ntg_tot > 0) {
+	hd_ExternalNodeTargetHostGroupId[i_node + 1] = hd_ExternalNodeTargetHostGroupId[i_node] + ntg;
+	hd_ExternalHostGroupNodeId[i_node + 1] = hd_ExternalHostGroupNodeId[i_node] + ntg;
+      }
+      else {
+	hd_ExternalNodeTargetHostGroupId[i_node + 1] = nullptr;
+	hd_ExternalHostGroupNodeId[i_node + 1] = nullptr;
+      }
     }
   }
+
+  if (ntg_tot > 0) {
+    gpuErrchk( cudaMemcpy( hd_ExternalNodeTargetHostGroupId[0], &node_target_host_group_flat[0], ntg_tot * sizeof( uint ),
+			   cudaMemcpyHostToDevice ) );
+    gpuErrchk( cudaMemcpy( hd_ExternalHostGroupNodeId[0], &host_group_node_id_flat[0], ntg_tot * sizeof( uint ),
+			   cudaMemcpyHostToDevice ) );
+  }
   
-  gpuErrchk( cudaMemcpy( hd_ExternalNodeTargetHostGroupId[0], &node_target_host_group_flat[0], ntg_tot * sizeof( uint ),
-			 cudaMemcpyHostToDevice ) );
-  gpuErrchk( cudaMemcpy( hd_ExternalHostGroupNodeId[0], &host_group_node_id_flat[0], ntg_tot * sizeof( uint ),
-			 cudaMemcpyHostToDevice ) );
   CUDAMALLOCCTRL("&d_ExternalNodeTargetHostGroupId", &d_ExternalNodeTargetHostGroupId, n_node*sizeof(uint*));
   gpuErrchk( cudaMemcpy( d_ExternalNodeTargetHostGroupId, &hd_ExternalNodeTargetHostGroupId[0], n_node*sizeof( uint* ),
 			 cudaMemcpyHostToDevice ) );
