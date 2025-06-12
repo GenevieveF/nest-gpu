@@ -35,6 +35,7 @@
 #include <time.h>
 #include <vector>
 #include <unordered_set>
+#include <algorithm>
 
 #include "connect_spec.h"
 #include "copass_kernels.h"
@@ -749,6 +750,11 @@ class ConnectionTemplate : public Connection
   std::vector<std::vector< std::unordered_set< inode_t > > > host_group_source_node_;
   // same as above, but ordered
   std::vector<std::vector< std::vector< inode_t > > > host_group_source_node_vect_;
+  // Alternative approach when the indexes of the host group source nodes are a sequence (range)
+  bool host_group_source_node_sequence_flag_;
+  std::vector < std::vector < inode_t > > host_group_source_node_min_;
+  std::vector < std::vector < inode_t > > host_group_source_node_max_;
+  
   // map of host group source nodes to local image nodes
   std::vector<std::vector< std::vector< int64_t > > > host_group_local_node_index_;
   // number of used bits in local image node indexes in host groups
@@ -1822,6 +1828,21 @@ hGetNodeIndex( inode_t* i_node_0, inode_t i_node_rel )
   return *( i_node_0 + i_node_rel );
 }
 
+inline void getNodeIndexRange( inode_t i_node_0, inode_t n_node, inode_t &inode_min, inode_t &inode_max )
+{
+  inode_min = i_node_0;
+  inode_max = i_node_0 + n_node - 1;
+}
+
+inline void getNodeIndexRange( inode_t* i_node_0, inode_t n_node, inode_t &inode_min, inode_t &inode_max )
+{
+  inode_t *min = std::min_element( i_node_0, i_node_0 + n_node );
+  inode_t *max = std::max_element( i_node_0, i_node_0 + n_node );
+  inode_min = *min;
+  inode_max = *max;
+}
+
+
 inline inode_t
 copyNodeArrayToDevice( inode_t i_node, inode_t n_node )
 {
@@ -2610,6 +2631,9 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::init()
   // from each source node (one_to_one, all_to_all, fixed_outdegree)
   // - false otherwise (fixed_indegree, fixed_total_number, pairwise_bernoulli)
   use_all_source_nodes_ = nullptr; // [n_connection_rules]:
+
+  // Flag set true when the indexes of the host group source nodes are always assumed to be a sequence (range)
+  host_group_source_node_sequence_flag_ = true;
 
   //////////////////////////////////////////////////
   // reverse-connection-related member variables
@@ -4327,6 +4351,8 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::setNHosts( int n_hosts )
       host_group_source_node_.resize(1);
       host_group_source_node_vect_.resize(1);
       host_group_local_node_index_.resize(1);
+      host_group_source_node_min_.resize(1);
+      host_group_source_node_max_.resize(1);
     }
     else {
       host_group_[0] = seq; // point-to-point communication

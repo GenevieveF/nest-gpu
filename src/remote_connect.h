@@ -638,7 +638,14 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectionMapCalibrate( inode
     for ( uint gi_host = 0; gi_host < nh; gi_host++ ) {// loop on hosts
       int nbits = 0;
       if (group_local_id > 0) {
-	uint n_src = host_group_source_node_[group_local_id][gi_host].size();
+	uint n_src;
+	if ( host_group_source_node_sequence_flag_ ) {
+	  n_src = ( host_group_source_node_max_[group_local_id][gi_host] >= host_group_source_node_min_[group_local_id][gi_host] ) ?
+	    ( host_group_source_node_max_[group_local_id][gi_host] - host_group_source_node_min_[group_local_id][gi_host] + 1 ) : 0; 
+	}
+	else {
+	  n_src = host_group_source_node_[group_local_id][gi_host].size();
+	}
 	nbits = msb(n_src) + 1;
 	bit_pack_nbits_[group_local_id][gi_host] = nbits;
       }
@@ -827,11 +834,19 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectionMapCalibrate( inode
     host_group_local_source_node_map_[group_local_id].resize(n_nodes);
     uint nh = host_group_[group_local_id].size(); // number of hosts in the group
     for ( uint gi_host = 0; gi_host < nh; gi_host++ ) {// loop on hosts
-      uint n_src = host_group_source_node_[group_local_id][gi_host].size();
-      //n_src_max = max(n_src_max, n_src);
-      host_group_source_node_vect_[group_local_id][gi_host].resize(n_src);
-      std::copy(host_group_source_node_[group_local_id][gi_host].begin(), host_group_source_node_[group_local_id][gi_host].end(),
-		host_group_source_node_vect_[group_local_id][gi_host].begin());
+      uint n_src;
+      if ( host_group_source_node_sequence_flag_ ) {
+	n_src = ( host_group_source_node_max_[group_local_id][gi_host] >= host_group_source_node_min_[group_local_id][gi_host] ) ?
+	  ( host_group_source_node_max_[group_local_id][gi_host] - host_group_source_node_min_[group_local_id][gi_host] + 1 ) : 0; 
+      }
+      else {
+	n_src = host_group_source_node_[group_local_id][gi_host].size();
+	
+	//n_src_max = max(n_src_max, n_src);
+	host_group_source_node_vect_[group_local_id][gi_host].resize(n_src);
+	std::copy(host_group_source_node_[group_local_id][gi_host].begin(), host_group_source_node_[group_local_id][gi_host].end(),
+		  host_group_source_node_vect_[group_local_id][gi_host].begin());
+      }
       
       host_group_local_node_index_[group_local_id][gi_host].resize(n_src);
 
@@ -889,9 +904,24 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectionMapCalibrate( inode
 	    inode_t src_node = hc_remote_source_node_map_[group_local_id][gi_host][i];
 	    tmp_node_map[src_node] = hc_image_node_map_[group_local_id][gi_host][i];
 	  }
-	  
-	  for (uint i=0; i<host_group_source_node_vect_[group_local_id][gi_host].size(); i++) {
-	    inode_t src_node = host_group_source_node_vect_[group_local_id][gi_host][i];
+
+
+	  uint n_src;
+	  if ( host_group_source_node_sequence_flag_ ) {
+	    n_src = ( host_group_source_node_max_[group_local_id][gi_host] >= host_group_source_node_min_[group_local_id][gi_host] ) ?
+	      ( host_group_source_node_max_[group_local_id][gi_host] - host_group_source_node_min_[group_local_id][gi_host] + 1 ) : 0;
+	  }
+	  else {
+	    n_src = host_group_source_node_vect_[group_local_id][gi_host].size();
+	  } 
+	  for (uint i=0; i<n_src; i++) {
+	    inode_t src_node;
+	    if ( host_group_source_node_sequence_flag_ ) {
+	      src_node = host_group_source_node_min_[group_local_id][gi_host] + i;
+	    }
+	    else {
+	      src_node = host_group_source_node_vect_[group_local_id][gi_host][i];
+	    }
 	    int64_t pos;
 	    if (src_node>src_node_max) {
 	      pos = -1;
@@ -911,14 +941,27 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectionMapCalibrate( inode
 	}
       }
       else { // only in the source, i.e. if src_host == this_host_
-	uint n_src = host_group_source_node_[group_local_id][gi_host].size();
+	uint n_src;
+	if ( host_group_source_node_sequence_flag_ ) {
+	  n_src = ( host_group_source_node_max_[group_local_id][gi_host] >= host_group_source_node_min_[group_local_id][gi_host] ) ?
+	    ( host_group_source_node_max_[group_local_id][gi_host] - host_group_source_node_min_[group_local_id][gi_host] + 1 ) : 0; 
+	}
+	else {
+	  n_src = host_group_source_node_vect_[group_local_id][gi_host].size();
+	}
 	for (uint i=0; i<n_src; i++) {
-	  inode_t i_source = host_group_source_node_vect_[group_local_id][gi_host][i];
-	  host_group_local_source_node_map_[group_local_id][i_source] = i;
+	  inode_t src_node;
+	  if ( host_group_source_node_sequence_flag_ ) {
+	    src_node = host_group_source_node_min_[group_local_id][gi_host] + i;
+	  }
+	  else {
+	    src_node = host_group_source_node_vect_[group_local_id][gi_host][i];
+	  }
+	  host_group_local_source_node_map_[group_local_id][src_node] = i;
 	  std::pair<std::unordered_set<int>::iterator, bool> insert_it =
-	    node_target_host_group_us[i_source].insert(group_local_id);
+	    node_target_host_group_us[src_node].insert(group_local_id);
 	  if (insert_it.second){
-	    node_target_host_group_[i_source].push_back(group_local_id);
+	    node_target_host_group_[src_node].push_back(group_local_id);
 	  }
 	}
       }
@@ -1125,9 +1168,18 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_RemoteConnect( int source_host,
       i_host = it - host_group_[group_local_id].begin();
 
       time_mark = getRealTime();
-      for (inode_t i=0; i<n_source; i++) {
-	inode_t i_source = hGetNodeIndex(h_source, i);
-	host_group_source_node_[group_local_id][i_host].insert(i_source);
+      if (host_group_source_node_sequence_flag_) {
+	inode_t inode_min;
+	inode_t inode_max;  
+	getNodeIndexRange(h_source, n_source, inode_min, inode_max);
+	host_group_source_node_min_[group_local_id][i_host] = min ( host_group_source_node_min_[group_local_id][i_host], inode_min);
+	host_group_source_node_max_[group_local_id][i_host] = max ( host_group_source_node_max_[group_local_id][i_host], inode_max);
+      }
+      else {
+	for (inode_t i=0; i<n_source; i++) {
+	  inode_t i_source = hGetNodeIndex(h_source, i);
+	  host_group_source_node_[group_local_id][i_host].insert(i_source);
+	}
       }
       InsertHostGroupSourceNode_time_ += (getRealTime() - time_mark);
     }
@@ -2833,13 +2885,22 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::CreateHostGroup(int *host_arr, int 
     host_group_local_id_.push_back(group_local_id);
     // push the new group into the host_group_ vector
     host_group_.push_back(hg);
-    // push a vector of empty unordered sets into host_group_source_node_
-    std::vector< std::unordered_set< inode_t > > empty_node_us(n_hosts);
-    host_group_source_node_.push_back(empty_node_us);
-    // push a vector of empty vectors into host_group_source_node_vect
-    std::vector< std::vector< inode_t > > empty_node_vect(n_hosts);
-    host_group_source_node_vect_.push_back(empty_node_vect);
-    
+    if (host_group_source_node_sequence_flag_) {
+      // push a vector of node indexes in host_group_source_node_min
+      std::vector< inode_t > i_node_min_vect(n_hosts, UINT_MAX);
+      host_group_source_node_min_.push_back(i_node_min_vect);
+      // push a vector of node indexes in host_group_source_node_max
+      std::vector< inode_t > i_node_max_vect(n_hosts, 0);
+      host_group_source_node_max_.push_back(i_node_max_vect);      
+    }
+    else {
+      // push a vector of empty unordered sets into host_group_source_node_
+      std::vector< std::unordered_set< inode_t > > empty_node_us(n_hosts);
+      host_group_source_node_.push_back(empty_node_us);
+      // push a vector of empty vectors into host_group_source_node_vect
+      std::vector< std::vector< inode_t > > empty_node_vect(n_hosts);
+      host_group_source_node_vect_.push_back(empty_node_vect);
+    }
     host_group_local_source_node_map_.push_back(std::vector< uint >());
     std::vector< std::vector< int64_t > > hg_lni(hg.size(), std::vector< int64_t >());
     host_group_local_node_index_.push_back(hg_lni);
@@ -2995,8 +3056,17 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
     // insert the source node indexes in the host-group array of source nodes of the host i_host
     double time_mark = getRealTime();
     for (inode_t i=0; i<n_source_arr[ish]; i++) {
-      inode_t i_source = hGetNodeIndex(h_source_arr[ish], i);
-      host_group_source_node_[group_local_id][i_host].insert(i_source);
+      if (host_group_source_node_sequence_flag_) {
+	inode_t inode_min;
+	inode_t inode_max;  
+	getNodeIndexRange(h_source_arr[ish], n_source_arr[ish], inode_min, inode_max);
+	host_group_source_node_min_[group_local_id][i_host] = min ( host_group_source_node_min_[group_local_id][i_host], inode_min);
+	host_group_source_node_max_[group_local_id][i_host] = max ( host_group_source_node_max_[group_local_id][i_host], inode_max);
+      }
+      else {
+	inode_t i_source = hGetNodeIndex(h_source_arr[ish], i);
+	host_group_source_node_[group_local_id][i_host].insert(i_source);
+      }
     }
     InsertHostGroupSourceNode_time_ += (getRealTime() - time_mark);
   }
