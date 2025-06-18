@@ -2962,7 +2962,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::organizeConnections( inode_t n_node
       // printf( "Indexing connection groups...\n" );
 
       int* d_conn_group_iconn0_mask;
-      CUDAMALLOCCTRL( "&d_conn_group_iconn0_mask", &d_conn_group_iconn0_mask, conn_block_size_ * sizeof( int ) );
+      CUDAMALLOCCTRL( "&d_conn_group_iconn0_mask", &d_conn_group_iconn0_mask, ( conn_block_size_ + 1 ) * sizeof( int ) );
 
       iconngroup_t* d_conn_group_iconn0_mask_cumul;
       CUDAMALLOCCTRL( "&d_conn_group_iconn0_mask_cumul",
@@ -2970,7 +2970,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::organizeConnections( inode_t n_node
         ( conn_block_size_ + 1 ) * sizeof( iconngroup_t ) );
 
       int* d_conn_group_idx0_mask;
-      CUDAMALLOCCTRL( "&d_conn_group_idx0_mask", &d_conn_group_idx0_mask, conn_block_size_ * sizeof( int ) );
+      CUDAMALLOCCTRL( "&d_conn_group_idx0_mask", &d_conn_group_idx0_mask, ( conn_block_size_ + 1 ) * sizeof( int ) );
 
       inode_t* d_conn_group_idx0_mask_cumul;
       CUDAMALLOCCTRL(
@@ -3027,7 +3027,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::organizeConnections( inode_t n_node
       if ( tot_conn_group_num_ > 0 )
       {
         iconngroup_t* d_conn_group_num;
-        CUDAMALLOCCTRL( "&d_conn_group_num", &d_conn_group_num, n_node * sizeof( iconngroup_t ) );
+        CUDAMALLOCCTRL( "&d_conn_group_num", &d_conn_group_num, ( n_node + 1 ) * sizeof( iconngroup_t ) );
         gpuErrchk( cudaMemset( d_conn_group_num, 0, sizeof( iconngroup_t ) ) );
 
         ConnKeyT* conn_key_subarray_prev = nullptr;
