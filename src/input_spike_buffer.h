@@ -191,7 +191,7 @@ getFirstOutConnectionKernel( int64_t n_conn, int64_t* first_out_connection, uint
 
   int i_source = getConnSource< ConnKeyT >( conn_key );
   if (i_source<0 || i_source>=n_nodes) {
-    printf("error in getFirstOutConnectionKernel, host %d, i_source %d, n_nodes %d\n", this_host, i_source, n_nodes);
+    printf("Error in getFirstOutConnectionKernel, host %d, i_source %d, n_nodes %d\n", this_host, i_source, n_nodes);
     return;
   }
   if ( i_conn >= 1 )
@@ -206,7 +206,7 @@ getFirstOutConnectionKernel( int64_t n_conn, int64_t* first_out_connection, uint
 
     int i_source_prev = getConnSource< ConnKeyT >( conn_key_prev );
     if (i_source_prev<0 || i_source_prev>=n_nodes) {
-      printf("error in getFirstOutConnectionKernel, host %d, i_source_prev %d, n_nodes %d\n", this_host, i_source_prev, n_nodes);
+      printf("Error in getFirstOutConnectionKernel, host %d, i_source_prev %d, n_nodes %d\n", this_host, i_source_prev, n_nodes);
       return;
     }
 
@@ -219,6 +219,57 @@ getFirstOutConnectionKernel( int64_t n_conn, int64_t* first_out_connection, uint
   // then i_conn is the first connection if its source node
   first_out_connection[ i_source ] = i_conn;
 }
+
+// Evaluates the index of the first outgoing connection of each source node (version for connection blocks)
+template < class ConnKeyT >
+__global__ void
+getFirstOutConnectionKernel( inode_t i_node_0, int64_t i_conn_0, int64_t n_conn, int64_t* first_out_connection, uint n_nodes, int this_host )
+{
+  int64_t i_conn_rel = ( int64_t ) blockIdx.x * blockDim.x + threadIdx.x;
+  if ( i_conn_rel >= n_conn )
+  {
+    return;
+  }
+  int64_t i_conn = i_conn_0 + i_conn_rel;
+  
+  // get connection block and relative index within the block
+  uint i_block = ( uint ) ( i_conn / ConnBlockSize );
+  int64_t i_block_conn = i_conn % ConnBlockSize;
+
+  // get references to key-structure pair representing the connection
+  ConnKeyT& conn_key = ( ( ConnKeyT** ) ConnKeyArray )[ i_block ][ i_block_conn ];
+
+  int i_source = getConnSource< ConnKeyT >( conn_key );
+  if (i_source < i_node_0 || i_source >= i_node_0 + n_nodes) {
+    printf("Error in getFirstOutConnectionKernel, host %d, i_node_0 %d, i_source %d, n_nodes %d\n", this_host, i_node_0, i_source, n_nodes);
+    return;
+  }
+  if ( i_conn >= 1 )
+  {
+    int64_t i_conn_prev = i_conn - 1; // previous connection
+    // get connection block and relative index within the block
+    uint i_block_prev = ( uint ) ( i_conn_prev / ConnBlockSize );
+    int64_t i_block_conn_prev = i_conn_prev % ConnBlockSize;
+
+    // get references to key-structure pair representing the connection
+    ConnKeyT& conn_key_prev = ( ( ConnKeyT** ) ConnKeyArray )[ i_block_prev ][ i_block_conn_prev ];
+
+    int i_source_prev = getConnSource< ConnKeyT >( conn_key_prev );
+    if (i_source_prev < 0 || i_source_prev > i_source) {
+      printf("Error in getFirstOutConnectionKernel, host %d, i_node_0 %d, i_source_prev %d, n_nodes %d\n", this_host, i_node_0, i_source_prev, n_nodes);
+      return;
+    }
+
+    if ( i_source_prev == i_source )
+    {
+      return;
+    }
+  }
+  // if i_conn is 0 or its source node index differs from the previous one
+  // then i_conn is the first connection if its source node
+  first_out_connection[ i_source - i_node_0 ] = i_conn;
+}
+
 
 // Evaluates the number of outgoing connections from each source node
 template < class ConnKeyT >
@@ -552,6 +603,11 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::initInputSpikeBuffer( inode_t n_loc
       n_local_nodes, d_input_spike_buffer_, d_input_spike_buffer_2d_, d_n_input_ports_cumul_ );
     DBGCUDASYNC;
   }
+
+  if (first_out_conn_in_device_ || check_first_out_connection_) { 
+    getFirstOutConnectionInHost(n_local_nodes, n_nodes);
+  }
+  
   // allocate array of indexes of first outgoing connection from each source node
   CUDAMALLOCCTRL( "&d_first_out_connection_", &d_first_out_connection_, sizeof( int64_t ) * n_nodes );
 
@@ -560,7 +616,8 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::initInputSpikeBuffer( inode_t n_loc
   if (n_conn_ > 0) {
     // Evaluates the index of the first outgoing connection of each source node
     getFirstOutConnectionKernel< ConnKeyT > <<< ( n_conn_ + 1023 ) / 1024, 1024 >>>( n_conn_, d_first_out_connection_, n_nodes, this_host_ );
-    DBGCUDASYNC;  
+    DBGCUDASYNC;
+
   }
   //else {
   //  gpuErrchk( cudaMemset( d_first_out_connection_, 0, sizeof( int64_t ) * n_nodes ) );
@@ -588,6 +645,42 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::initInputSpikeBuffer( inode_t n_loc
   CUDAMALLOCCTRL( "&d_spike_n_connections_", &d_spike_n_connections_, max_remote_spike_num * sizeof( int ) );
 #endif
 
+    //////////////////////////////////////////////////////////////////////
+    //// Only for checking
+    if (first_out_conn_in_device_ && check_first_out_connection_) { 
+      if (n_nodes > n_local_nodes) {
+	std::cout << "Checking first_out_connection on host " << this_host_ << std::endl;
+	inode_t n_image_nodes = n_nodes - n_local_nodes;
+	std::vector<int64_t> check_first_out_connection(n_image_nodes);
+	// copy d_first_out_connection_ to CPU memory
+	gpuErrchk( cudaMemcpy( &check_first_out_connection[0], d_first_out_connection_ + n_local_nodes,
+			       n_image_nodes * sizeof( int64_t ), cudaMemcpyDeviceToHost ) );
+	for (uint i = 0; i < n_image_nodes; i++) {
+	  if (check_first_out_connection[i] != h_first_out_connection_[i]) {
+	    throw ngpu_exception( std::string( "Error checking first_out_connection on host " ) + std::to_string( this_host_ ) );
+	  }
+	}
+	std::cout << "Finished checking first_out_connection on host " << this_host_ << " OK" <<  std::endl;
+#ifdef HAVE_N_OUT_CONNECTIONS
+	std::cout << "Checking n_out_connections on host " << this_host_ << std::endl;
+	std::vector<int> check_n_out_connections(n_image_nodes);
+	// copy d_n_out_connections_ to CPU memory
+	gpuErrchk( cudaMemcpy( &check_n_out_connections[0], d_n_out_connections_ + n_local_nodes,
+			       n_image_nodes * sizeof( int ), cudaMemcpyDeviceToHost ) );
+	for (uint i = 0; i < n_image_nodes; i++) {
+	  // std::cout << "CNOC " << this_host_ << " " << check_n_out_connections[i] << " " <<  h_n_out_connections_[i] << std::endl;
+	  if (check_n_out_connections[i] != h_n_out_connections_[i]) {
+	    throw ngpu_exception( std::string( "Error checking n_out_connections on host " ) + std::to_string( this_host_ ) );
+	  }
+	}
+	std::cout << "Finished checking n_out_connections on host " << this_host_ << " OK" <<  std::endl;
+#endif	
+      }
+    }
+    //////////////////////////////////////////////////////////////////////
+    
+
+  
   initInputSpikeBufferPointersKernel<<< 1, 1 >>>( d_n_input_ports_,
 						  d_max_input_delay_,
 						  d_input_spike_buffer_,

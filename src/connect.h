@@ -56,6 +56,18 @@ enum
 typedef uint inode_t;
 typedef uint iconngroup_t;
 
+namespace input_spike_buffer_ns
+{
+// Initialize array of first outgoing connection index of each node to default value of -1 (no outgoing connections)
+__global__ void initFirstOutConnectionKernel
+( inode_t n_local_nodes, int64_t* first_out_connection );
+
+// Evaluates the index of the first outgoing connection of each source node (version for connection blocks)
+template < class ConnKeyT >
+__global__ void getFirstOutConnectionKernel
+( inode_t i_node_0, int64_t i_conn_0, int64_t n_conn, int64_t* first_out_connection, uint n_nodes, int this_host );
+}
+
 // Connection is the class used to represent connection data and methods.
 // It is defined as an abstract class, with pure virtual methods
 // that offer an interface for using this class in the same way
@@ -813,6 +825,22 @@ class ConnectionTemplate : public Connection
   
   // auxiliary memory block
   //uint *d_aux_array_;
+
+  //////////////////////////////////////////////////////////////////////
+  // Variables related to the possibility to store the index of the first connection
+  // outgoing from each image node in CPU memory rather than in CPU
+  // size of the blocks copied one-by-one from GPU to CPU memory
+  uint first_out_conn_block_size_;
+  // boolean variable true if first connection indexes for image nodes are stored only in GPU memory
+  // false if they are stored only in CPU memory (the two possibilities are exclusive)
+  bool first_out_conn_in_device_;
+  bool check_first_out_connection_;
+  // index of the first connection outgoing from each image node [n_image_node]
+  std::vector<int64_t> h_first_out_connection_;
+  // number of connections outgoing from each image node [n_image_node]
+  std::vector<int64_t> h_n_out_connections_;
+  // method to get the the index of the first connection outgoing from each image node in CPU memory
+  int getFirstOutConnectionInHost(inode_t n_local_nodes, inode_t n_total_nodes);
 
   //////////////////////////////////////////////////
   // class ConnectionTemplate methods
@@ -2697,6 +2725,10 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::init()
   
   // auxiliary memory block
   //uint *d_aux_array_ = nullptr;
+
+  first_out_conn_block_size_ = 16*1024*1024;
+  first_out_conn_in_device_ = true;
+  check_first_out_connection_ = false;
   
   initConnRandomGenerator();
 
@@ -4730,6 +4762,81 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::resetConnectionSpikeTimeDown()
 
   return 0;
 }
+
+
+// Method to get the the index of the first connection outgoing from each image node in CPU memory
+template < class ConnKeyT, class ConnStructT >
+int
+ConnectionTemplate< ConnKeyT, ConnStructT >::getFirstOutConnectionInHost
+(inode_t n_local_nodes, inode_t n_total_nodes)
+{
+
+  if (n_conn_ > 0 && n_total_nodes > n_local_nodes) {
+    int64_t n_image_nodes = n_total_nodes - n_local_nodes;
+    // allocate the vector in CPU memory to store the index of the first connections
+    // an extra element is used to evaluate the number of outgoing connections of each node
+    // from the difference between consecutive connection indexes
+    h_first_out_connection_.resize(n_image_nodes + 1, -1);
+    h_first_out_connection_[n_image_nodes] = n_conn_;
+    h_n_out_connections_.resize(n_image_nodes);
+    // allocate d_first_out_connection (first_out_conn_block_size_)
+    CUDAMALLOCCTRL( "&d_first_out_connection_", &d_first_out_connection_, first_out_conn_block_size_ * sizeof( int64_t ) );
+
+    // loop on blocks of first_out_conn_block_size_ nodes to limit the temporary storage requirements on GPU memory
+    for (inode_t i_node_0 = n_local_nodes; i_node_0<n_total_nodes; i_node_0+=first_out_conn_block_size_) {
+      // i_node_1 is the one-after-the-last node of the block
+      inode_t i_node_1 = min(i_node_0 + first_out_conn_block_size_, n_total_nodes);
+      inode_t n_nodes = i_node_1 - i_node_0;
+      // the first connection index is initialized to -1 and remains unchanged for nodes without outgoing connections 
+      input_spike_buffer_ns::initFirstOutConnectionKernel<<< ( n_nodes + 1023 ) / 1024, 1024 >>>( n_nodes, d_first_out_connection_ );
+      DBGCUDASYNC;
+
+      // write i_node_0 and i_node_1 in the ConnKeyT representation with minimum delay -> conn_key_0, conn_key_1
+      ConnKeyT conn_key_0 = 0;
+      setConnSource(conn_key_0, i_node_0);
+      ConnKeyT conn_key_1 = 0;
+      setConnSource(conn_key_1, i_node_1);
+      // Find number of connections with key < conn_key_0, i.e. source index < i_node_0
+      int64_t i_conn_0 = search_block_array_down<ConnKeyT>(&conn_key_vect_[0], n_conn_, conn_block_size_, conn_key_0);
+      // Find number of connections with key < conn_key_1, i.e. source index < i_node_1
+      int64_t i_conn_1 = search_block_array_down<ConnKeyT>(&conn_key_vect_[0], n_conn_, conn_block_size_, conn_key_1);
+      // number of connections with source index >= i_node_0 and < i_node_1
+      int64_t n_conn = i_conn_1 - i_conn_0;
+
+      // get index of first outgoing connection for each node index in the block
+      // (remains -1 for nodes without outgoing connections) 
+      input_spike_buffer_ns::getFirstOutConnectionKernel< ConnKeyT > <<< ( n_conn + 1023 ) / 1024, 1024 >>>
+	( i_node_0, i_conn_0, n_conn, d_first_out_connection_, n_nodes, this_host_ );
+      DBGCUDASYNC;
+      // copy d_first_out_connection_ to the appropriate slice of h_first_out_connection_ in CPU memory
+      gpuErrchk( cudaMemcpy( &h_first_out_connection_[i_node_0 - n_local_nodes], d_first_out_connection_,
+			     n_nodes * sizeof( int64_t ), cudaMemcpyDeviceToHost ) );
+    }
+
+    // compute the number of connections outgoing from each image node
+    // loop on image nodes
+    for (inode_t i_node = 0; i_node < n_image_nodes; i_node++) {
+      int64_t i_conn0 = h_first_out_connection_[ i_node ];
+      if ( i_conn0 < 0 ) {
+	h_n_out_connections_[ i_node ] = 0;
+	continue;
+      }
+      int64_t i_conn1 = n_conn_;
+      for ( inode_t i_node1 = i_node + 1; i_node1 < n_image_nodes; i_node1++ ) {
+	int64_t ic = h_first_out_connection_[ i_node1 ];
+	if ( ic >= 0 ) {
+	  i_conn1 = ic;
+	  break;
+	}
+      }
+      h_n_out_connections_[ i_node ] = i_conn1 - i_conn0;
+    }      
+  }
+
+  return 0;
+}
+
+
 
 
 bool isSequence(inode_t);
