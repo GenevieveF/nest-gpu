@@ -425,9 +425,10 @@ public:
   virtual std::vector<float> &getSpikeMul() = 0;
   
   // return reference to vector of the number of connections to send each spike from a remote node
-  virtual std::vector<int64_t> &getSpikeNConnections() = 0;
+  virtual std::vector<int> &getSpikeNConnections() = 0;
 
-
+  virtual void setNSpikeFromHost(int n_spike_from_host) = 0;
+  
   ///////////////////////////////////////////////////////////////////////////////////////////////////////
   // Build connections with fixed indegree rule for source neurons and target neurons distributed across
   // MPI processes (hosts)
@@ -862,8 +863,9 @@ class ConnectionTemplate : public Connection
   // vector of the multiplicity of each spike from a remote node at current time step 
   std::vector<float> h_spike_mul_;
   // vector of the number of connections to send each spike from a remote node at current time step 
-  std::vector<int64_t> h_spike_n_connections_;
-
+  std::vector<int> h_spike_n_connections_;
+  int n_spike_from_host_;
+  
   // method to get the the index of the first connection outgoing from each image node in CPU memory
   int getFirstOutConnectionInHost(inode_t n_local_nodes, inode_t n_total_nodes);
 
@@ -1487,11 +1489,15 @@ public:
   }
   
   // return reference to vector of the number of connections to send each spike from a remote node
-  std::vector<int64_t> &getSpikeNConnections()
+  std::vector<int> &getSpikeNConnections()
   {
     return h_spike_n_connections_;
   }
 
+  void setNSpikeFromHost(int n_spike_from_host)
+  {
+    n_spike_from_host_ = n_spike_from_host;
+  }
 };
 
 namespace poiss_conn
@@ -2789,8 +2795,9 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::init()
   //uint *d_aux_array_ = nullptr;
 
   first_out_conn_block_size_ = 16*1024*1024;
-  first_out_conn_in_device_ = true;
+  first_out_conn_in_device_ = false;
   check_first_out_connection_ = false;
+  n_spike_from_host_ = 0;
   
   initConnRandomGenerator();
 

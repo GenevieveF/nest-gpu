@@ -120,6 +120,18 @@ initFirstOutConnectionKernel( inode_t n_nodes, int64_t* first_out_connection )
   first_out_connection[ i_node ] = -1;
 }
 
+// Initialize array of spike multiplicity from remote nodes to 1
+__global__ void
+initSpikeMulKernel( int n_spikes, float* spike_mul )
+{
+  inode_t i_spike = blockIdx.x * blockDim.x + threadIdx.x;
+  if ( i_spike >= n_spikes )
+  {
+    return;
+  }
+  spike_mul[ i_spike ] = 1;
+}
+
 
 __global__ void
 GetInputSpikes( inode_t i_node0,

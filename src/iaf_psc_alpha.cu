@@ -207,7 +207,7 @@ iaf_psc_alpha::Update( long long it, double t1 )
   // std::cout << "iaf_psc_alpha neuron update\n";
   iaf_psc_alpha_Update<<< ( n_node_ + 1023 ) / 1024, 1024 >>>(
     n_node_, i_node_0_, var_arr_, param_arr_, n_var_, n_param_ );
-  // gpuErrchk( cudaDeviceSynchronize() );
+  DBGCUDASYNC;
 
   return 0;
 }

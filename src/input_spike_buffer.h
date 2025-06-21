@@ -485,6 +485,9 @@ __global__ void initInputSpikeBufferKernel( inode_t n_local_nodes,
 // Initialize array of first outgoing connection index of each node to default value of -1 (no outgoing connections)
 __global__ void initFirstOutConnectionKernel( inode_t n_local_nodes, int64_t* first_out_connection );
 
+// Initialize array of spike multiplicity from image nodes to 1
+__global__ void initSpikeMulKernel( int n_spikes, float* spike_mul );
+
 __global__ void GetInputSpikes( inode_t i_node0,
   inode_t n_nodes,
   int n_port,
@@ -604,23 +607,41 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::initInputSpikeBuffer( inode_t n_loc
     DBGCUDASYNC;
   }
 
-  if (first_out_conn_in_device_ || check_first_out_connection_) { 
+  int64_t n_local_conn = 0;
+  if (!first_out_conn_in_device_ || check_first_out_connection_) {
     getFirstOutConnectionInHost(n_local_nodes, n_nodes);
     h_spike_first_connection_.resize(max_remote_spike_num);
     h_spike_mul_.resize(max_remote_spike_num);
     h_spike_n_connections_.resize(max_remote_spike_num);
+
+    if (!check_first_out_connection_) {
+      // write n_local_nodes in the ConnKeyT representation with minimum delay -> conn_key
+      ConnKeyT conn_key = 0;
+      setConnSource(conn_key, n_local_nodes);
+      // Find number of connections with key < conn_key, i.e. source index < n_local_nodes
+      n_local_conn = search_block_array_down<ConnKeyT>(&conn_key_vect_[0], n_conn_, conn_block_size_, conn_key);
+      // allocate array of indexes of first outgoing connection from each source node
+      CUDAMALLOCCTRL( "&d_first_out_connection_", &d_first_out_connection_, sizeof( int64_t ) * n_local_nodes );
+      initFirstOutConnectionKernel<<< ( n_local_nodes + 1023 ) / 1024, 1024 >>>( n_local_nodes, d_first_out_connection_ );
+      DBGCUDASYNC;
+      if (n_local_conn > 0) {
+	// Evaluates the index of the first outgoing connection of each local source node
+	getFirstOutConnectionKernel< ConnKeyT > <<< ( n_local_conn + 1023 ) / 1024, 1024 >>>( n_local_conn, d_first_out_connection_, n_local_nodes, this_host_ );
+	DBGCUDASYNC;
+      }
+    }
   }
-  
-  // allocate array of indexes of first outgoing connection from each source node
-  CUDAMALLOCCTRL( "&d_first_out_connection_", &d_first_out_connection_, sizeof( int64_t ) * n_nodes );
+  if (first_out_conn_in_device_ || check_first_out_connection_) {
+    // allocate array of indexes of first outgoing connection from each source node
+    CUDAMALLOCCTRL( "&d_first_out_connection_", &d_first_out_connection_, sizeof( int64_t ) * n_nodes );
 
-  initFirstOutConnectionKernel<<< ( n_nodes + 1023 ) / 1024, 1024 >>>( n_nodes, d_first_out_connection_ );
-  DBGCUDASYNC;
-  if (n_conn_ > 0) {
-    // Evaluates the index of the first outgoing connection of each source node
-    getFirstOutConnectionKernel< ConnKeyT > <<< ( n_conn_ + 1023 ) / 1024, 1024 >>>( n_conn_, d_first_out_connection_, n_nodes, this_host_ );
+    initFirstOutConnectionKernel<<< ( n_nodes + 1023 ) / 1024, 1024 >>>( n_nodes, d_first_out_connection_ );
     DBGCUDASYNC;
-
+    if (n_conn_ > 0) {
+      // Evaluates the index of the first outgoing connection of each source node
+      getFirstOutConnectionKernel< ConnKeyT > <<< ( n_conn_ + 1023 ) / 1024, 1024 >>>( n_conn_, d_first_out_connection_, n_nodes, this_host_ );
+      DBGCUDASYNC;
+    }
   }
   //else {
   //  gpuErrchk( cudaMemset( d_first_out_connection_, 0, sizeof( int64_t ) * n_nodes ) );
@@ -634,14 +655,26 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::initInputSpikeBuffer( inode_t n_loc
   CUDAMALLOCCTRL( "&d_n_spikes_", &d_n_spikes_, sizeof( int ) );
   gpuErrchk( cudaMemset( d_n_spikes_, 0, sizeof( int ) ) );
 #ifdef HAVE_N_OUT_CONNECTIONS
-  // allocate array of number of outgoing connections from each node
-  CUDAMALLOCCTRL( "&d_n_out_connections_", &d_n_out_connections_, sizeof( int ) * n_nodes );
-  gpuErrchk( cudaMemset( d_n_out_connections_, 0, sizeof( int ) * n_nodes ) );
-  if (n_conn_ > 0) {
-    // Evaluates the number of outgoing connection from each source node
-    getNOutConnectionsKernel< ConnKeyT > <<< ( n_nodes + 1023 ) / 1024, 1024 >>>(n_nodes, n_conn_, d_first_out_connection_, d_n_out_connections_ );
-    DBGCUDASYNC;
+  if (first_out_conn_in_device_ || check_first_out_connection_) {
+    // allocate array of number of outgoing connections from each node
+    CUDAMALLOCCTRL( "&d_n_out_connections_", &d_n_out_connections_, sizeof( int ) * n_nodes );
+    gpuErrchk( cudaMemset( d_n_out_connections_, 0, sizeof( int ) * n_nodes ) );
+    if (n_conn_ > 0) {
+      // Evaluates the number of outgoing connection from each source node
+      getNOutConnectionsKernel< ConnKeyT > <<< ( n_nodes + 1023 ) / 1024, 1024 >>>(n_nodes, n_conn_, d_first_out_connection_, d_n_out_connections_ );
+      DBGCUDASYNC;
+    }
   }
+  else {
+    // allocate array of number of outgoing connections from each node
+    CUDAMALLOCCTRL( "&d_n_out_connections_", &d_n_out_connections_, sizeof( int ) * n_local_nodes );
+    gpuErrchk( cudaMemset( d_n_out_connections_, 0, sizeof( int ) * n_local_nodes ) );
+    if (n_local_conn > 0) {
+      // Evaluates the number of outgoing connection from each source node
+      getNOutConnectionsKernel< ConnKeyT > <<< ( n_local_nodes + 1023 ) / 1024, 1024 >>>(n_local_nodes, n_local_conn, d_first_out_connection_, d_n_out_connections_ );
+      DBGCUDASYNC;
+    }
+  }    
   // allocate array of number of connections through which each spike emitted at current time step
   // should be delivered
   // temporary size is n_local_nodes, in the future evaluate [n_all_nodes*time_resolution*avg_max_firing_rate]
@@ -748,6 +781,18 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::deliverSpikes()
 {
   int n_spikes;
   gpuErrchk( cudaMemcpy( &n_spikes, d_n_spikes_, sizeof( int ), cudaMemcpyDeviceToHost ) );
+
+  if (n_spike_from_host_ > 0) {
+    gpuErrchk( cudaMemcpy( d_spike_first_connection_ + n_spikes, &h_spike_first_connection_[0], n_spike_from_host_ * sizeof( int64_t ), cudaMemcpyHostToDevice ) );
+    gpuErrchk( cudaMemcpy( d_spike_n_connections_ + n_spikes, &h_spike_n_connections_[0], n_spike_from_host_ * sizeof( int ), cudaMemcpyHostToDevice ) );
+    // for now spike multiplicity from remote nodes is assumed to be one
+    initSpikeMulKernel<<< ( n_spike_from_host_ + 1023 ) / 1024, 1024 >>>( n_spike_from_host_, d_spike_mul_ + n_spikes );
+    DBGCUDASYNC;
+
+    n_spikes += n_spike_from_host_;
+    gpuErrchk( cudaMemcpy( d_n_spikes_, &n_spikes, sizeof( int ), cudaMemcpyHostToDevice ) );
+  }
+  
   if ( n_spikes > 0 )
   {
     deliverSpikesKernel< ConnKeyT, ConnStructT > <<< n_spikes, 1024 >>>( n_conn_ );
