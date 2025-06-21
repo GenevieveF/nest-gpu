@@ -606,6 +606,9 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::initInputSpikeBuffer( inode_t n_loc
 
   if (first_out_conn_in_device_ || check_first_out_connection_) { 
     getFirstOutConnectionInHost(n_local_nodes, n_nodes);
+    h_spike_first_connection_.resize(max_remote_spike_num);
+    h_spike_mul_.resize(max_remote_spike_num);
+    h_spike_n_connections_.resize(max_remote_spike_num);
   }
   
   // allocate array of indexes of first outgoing connection from each source node

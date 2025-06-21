@@ -409,6 +409,24 @@ public:
   // host_arr: array of host inexes, n_hosts: nomber of hosts in the group
   virtual int CreateHostGroup(int *host_arr, int n_hosts, bool mpi_flag) = 0;
 
+  // return boolean flag activated if first connection of each image node is stored in GPU memory 
+  virtual bool getFirstOutConnInDevice() = 0;
+  
+  // return reference to vector of first connections outgoing from each image node [n_image_node]
+  virtual const std::vector<int64_t> &getFirstOutConnection() const  = 0;
+  
+  // return reference to vector of number of connections outgoing from each image node [n_image_node]
+  virtual const std::vector<int64_t> &getNOutConnections() const = 0;
+
+  // return reference to vector of the first connection to send each spike from a remote node 
+  virtual std::vector<int64_t> &getSpikeFirstConnection() = 0;
+  
+  // return reference to vector of the multiplicity of each spike from a remote node
+  virtual std::vector<float> &getSpikeMul() = 0;
+  
+  // return reference to vector of the number of connections to send each spike from a remote node
+  virtual std::vector<int64_t> &getSpikeNConnections() = 0;
+
 
   ///////////////////////////////////////////////////////////////////////////////////////////////////////
   // Build connections with fixed indegree rule for source neurons and target neurons distributed across
@@ -839,6 +857,13 @@ class ConnectionTemplate : public Connection
   std::vector<int64_t> h_first_out_connection_;
   // number of connections outgoing from each image node [n_image_node]
   std::vector<int64_t> h_n_out_connections_;
+  // vector of the first connection of each spike from a remote node at current time step 
+  std::vector<int64_t> h_spike_first_connection_;
+  // vector of the multiplicity of each spike from a remote node at current time step 
+  std::vector<float> h_spike_mul_;
+  // vector of the number of connections to send each spike from a remote node at current time step 
+  std::vector<int64_t> h_spike_n_connections_;
+
   // method to get the the index of the first connection outgoing from each image node in CPU memory
   int getFirstOutConnectionInHost(inode_t n_local_nodes, inode_t n_total_nodes);
 
@@ -1429,6 +1454,43 @@ public:
   // Method that creates a group of hosts for remote spike communication (i.e. a group of MPI processes)
   // host_arr: array of host inexes, n_hosts: nomber of hosts in the group
   int CreateHostGroup(int *host_arr, int n_hosts, bool mpi_flag);
+
+
+  // return boolean flag activated if first connection of each image node is stored in GPU memory 
+  bool getFirstOutConnInDevice()
+  {
+    return first_out_conn_in_device_;
+  }
+  
+  // return reference to vector of first connections outgoing from each image node [n_image_node]
+  const std::vector<int64_t> &getFirstOutConnection() const
+  {
+    return h_first_out_connection_;
+  }
+  
+  // return reference to vector of number of connections outgoing from each image node [n_image_node]
+  const std::vector<int64_t> &getNOutConnections() const
+  {
+    return h_n_out_connections_;
+  }
+
+  // return reference to vector of the first connection to send each spike from a remote node 
+  std::vector<int64_t> &getSpikeFirstConnection()
+  {
+    return h_spike_first_connection_;
+  }
+  
+  // return reference to vector of the multiplicity of each spike from a remote node
+  std::vector<float> &getSpikeMul()
+  {
+    return h_spike_mul_;
+  }
+  
+  // return reference to vector of the number of connections to send each spike from a remote node
+  std::vector<int64_t> &getSpikeNConnections()
+  {
+    return h_spike_n_connections_;
+  }
 
 };
 
