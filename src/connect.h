@@ -430,6 +430,12 @@ public:
   // return reference to vector of the number of connections to send each spike from a remote node
   virtual std::vector<int> &getSpikeNConnections() = 0;
 
+  // return host copy of remote_source_node_map [group_local_id][i_host][i]
+  virtual const std::vector< std::vector< std::vector< uint > > > &getHCRemoteSourceNodeMap() const = 0;
+
+  // return host copy of image_node_map [group_local_id][i_host][i]
+  virtual const std::vector< std::vector< std::vector< uint > > > &getHCImageNodeMap() const = 0;
+  
   virtual void setNSpikeFromHost(int n_spike_from_host) = 0;
   
   ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1503,6 +1509,19 @@ public:
     return h_spike_n_connections_;
   }
 
+  // return host copy of remote_source_node_map [group_local_id][i_host][i]
+  const std::vector< std::vector< std::vector< uint > > > &getHCRemoteSourceNodeMap() const
+  {
+    return hc_remote_source_node_map_;
+  }
+
+  // return host copy of image_node_map [group_local_id][i_host][i]
+  const std::vector< std::vector< std::vector< uint > > > &getHCImageNodeMap() const
+  {
+    return hc_image_node_map_;
+  }
+
+  
   void setNSpikeFromHost(int n_spike_from_host)
   {
     n_spike_from_host_ = n_spike_from_host;

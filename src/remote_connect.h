@@ -854,6 +854,38 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectionMapCalibrate( inode
   }
   
   PRINT_TIME;
+
+  // copy remote-source-node-to-local-image-index maps from GPU to CPU memory
+  if (!first_out_conn_in_device_) {
+    for ( int i_host = 0; i_host < n_hosts_; i_host++ ) { // loop on hosts
+      // get number of elements in the map
+      uint n_node_map;
+      gpuErrchk(
+		cudaMemcpy( &n_node_map, &d_n_remote_source_node_map_[0][ i_host ], sizeof( uint ), cudaMemcpyDeviceToHost ) );
+      if (n_node_map > 0) {
+	hc_remote_source_node_map_[0][i_host].resize(n_node_map);
+	hc_image_node_map_[0][i_host].resize(n_node_map);
+	// loop on remote-source-node-to-local-image-node map blocks
+	uint n_map_blocks =  h_remote_source_node_map_[0][i_host].size();
+	for (uint ib=0; ib<n_map_blocks; ib++) {
+	  uint n_elem;
+	  if (ib<n_map_blocks-1) {
+	    n_elem = node_map_block_size_;
+	  }
+	  else {
+	    n_elem = (n_node_map - 1) % node_map_block_size_ + 1;
+	  }
+	  gpuErrchk(cudaMemcpy(&hc_remote_source_node_map_[0][i_host][ib*node_map_block_size_],
+			       h_remote_source_node_map_[0][i_host][ib], n_elem*sizeof(uint), cudaMemcpyDeviceToHost ));
+	  gpuErrchk(cudaMemcpy(&hc_image_node_map_[0][i_host][ib*node_map_block_size_],
+			       h_image_node_map_[0][i_host][ib], n_elem*sizeof(uint), cudaMemcpyDeviceToHost ));
+	}
+      }
+    }
+  }
+
+  PRINT_TIME;
+  
   std::vector<uint> tmp_node_map;
   //tmp_node_map.resize(src_node_max);
 
