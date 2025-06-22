@@ -235,6 +235,8 @@ class NESTGPU
 
   bool check_node_maps_;
 
+  bool first_out_conn_in_device_;
+  
   std::vector< int > ext_neuron_input_spike_node_;
 
   std::vector< int > ext_neuron_input_spike_port_;

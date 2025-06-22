@@ -298,8 +298,6 @@ getNOutConnectionsKernel( inode_t n_node, int64_t n_conn, int64_t* first_out_con
     }
   }
   n_out_connections[ i_node ] = i_conn1 - i_conn0;
-  //  printf("ok1 i_node: %d\ti_conn1: %lld\tfirst_out_connection: %lld\tn_out_connections: %d\n",
-  //	 i_node, i_conn1, first_out_connection[i_node], n_out_connections[i_node]);
 }
 
 #ifdef HAVE_N_OUT_CONNECTIONS
@@ -315,9 +313,6 @@ deliverSpikesKernel( int64_t n_conn )
     return;
   }
   int64_t i_conn1 = i_conn0 + input_spike_buffer_ns::spike_n_connections_[ i_spike ];
-  // if (i_conn0==59) {
-  //   printf("ok i_conn0: %lld\t i_conn1: %lld\n", i_conn0, i_conn1);
-  // }
 
   float mul = input_spike_buffer_ns::spike_mul_[ i_spike ];
   for ( int64_t i_conn = i_conn0 + threadIdx.x; i_conn < i_conn1; i_conn += blockDim.x )
@@ -618,16 +613,18 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::initInputSpikeBuffer( inode_t n_loc
       // write n_local_nodes in the ConnKeyT representation with minimum delay -> conn_key
       ConnKeyT conn_key = 0;
       setConnSource(conn_key, n_local_nodes);
-      // Find number of connections with key < conn_key, i.e. source index < n_local_nodes
-      n_local_conn = search_block_array_down<ConnKeyT>(&conn_key_vect_[0], n_conn_, conn_block_size_, conn_key);
-      // allocate array of indexes of first outgoing connection from each source node
       CUDAMALLOCCTRL( "&d_first_out_connection_", &d_first_out_connection_, sizeof( int64_t ) * n_local_nodes );
       initFirstOutConnectionKernel<<< ( n_local_nodes + 1023 ) / 1024, 1024 >>>( n_local_nodes, d_first_out_connection_ );
       DBGCUDASYNC;
-      if (n_local_conn > 0) {
-	// Evaluates the index of the first outgoing connection of each local source node
-	getFirstOutConnectionKernel< ConnKeyT > <<< ( n_local_conn + 1023 ) / 1024, 1024 >>>( n_local_conn, d_first_out_connection_, n_local_nodes, this_host_ );
-	DBGCUDASYNC;
+      if (n_conn_ > 0) {
+	// Find number of connections with key < conn_key, i.e. source index < n_local_nodes
+	n_local_conn = search_block_array_down<ConnKeyT>(&conn_key_vect_[0], n_conn_, conn_block_size_, conn_key);
+	// allocate array of indexes of first outgoing connection from each source node
+	if (n_local_conn > 0) {
+	  // Evaluates the index of the first outgoing connection of each local source node
+	  getFirstOutConnectionKernel< ConnKeyT > <<< ( n_local_conn + 1023 ) / 1024, 1024 >>>( n_local_conn, d_first_out_connection_, n_local_nodes, this_host_ );
+	  DBGCUDASYNC;
+	}
       }
     }
   }
@@ -704,7 +701,6 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::initInputSpikeBuffer( inode_t n_loc
 	gpuErrchk( cudaMemcpy( &check_n_out_connections[0], d_n_out_connections_ + n_local_nodes,
 			       n_image_nodes * sizeof( int ), cudaMemcpyDeviceToHost ) );
 	for (uint i = 0; i < n_image_nodes; i++) {
-	  // std::cout << "CNOC " << this_host_ << " " << check_n_out_connections[i] << " " <<  h_n_out_connections_[i] << std::endl;
 	  if (check_n_out_connections[i] != h_n_out_connections_[i]) {
 	    throw ngpu_exception( std::string( "Error checking n_out_connections on host " ) + std::to_string( this_host_ ) );
 	  }

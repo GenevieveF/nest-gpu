@@ -111,6 +111,7 @@ enum KernelBoolParamIndexes
   i_check_node_maps,
   i_mpi_bitpack,
   i_max_n_ports_warning,
+  i_first_out_conn_in_device,
   N_KERNEL_BOOL_PARAM
 };
 
@@ -143,7 +144,8 @@ const std::string kernel_bool_param_name[ N_KERNEL_BOOL_PARAM ] = {
   "remote_spike_mul",
   "check_node_maps",
   "mpi_bitpack",
-  "max_n_ports_warning"
+  "max_n_ports_warning",
+  "first_out_conn_in_device"
 };
 
 int
@@ -185,6 +187,7 @@ NESTGPU::NESTGPU()
 
   conn_ = nullptr;
   check_node_maps_ = false;
+  first_out_conn_in_device_ = true;
   // by default, connection structure type used is the 12-byte type
   setConnStructType( i_conn12b );
   // setConnStructType( i_conn16b );
@@ -387,6 +390,7 @@ NESTGPU::setConnStructType( int conn_struct_type )
 
   conn_->InitTimers();
   conn_->check_node_maps_ = check_node_maps_;
+  conn_->setFirstOutConnInDevice(first_out_conn_in_device_);
   
   return 0;
 }
@@ -2273,6 +2277,8 @@ NESTGPU::GetBoolParam( std::string param_name )
     return mpi_bitpack_;
   case i_max_n_ports_warning:
     return max_n_ports_warning_;
+  case i_first_out_conn_in_device:
+    return first_out_conn_in_device_;
   default:
     throw ngpu_exception( std::string( "Unrecognized kernel boolean parameter " ) + param_name );
   }
@@ -2303,6 +2309,10 @@ NESTGPU::SetBoolParam( std::string param_name, bool val )
     break;
   case i_max_n_ports_warning:
     max_n_ports_warning_ = val;
+    break;
+  case i_first_out_conn_in_device:
+    first_out_conn_in_device_ = val;
+    conn_->setFirstOutConnInDevice( val );
     break;
   default:
     throw ngpu_exception( std::string( "Unrecognized kernel boolean parameter " ) + param_name );

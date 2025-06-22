@@ -411,6 +411,9 @@ public:
 
   // return boolean flag activated if first connection of each image node is stored in GPU memory 
   virtual bool getFirstOutConnInDevice() = 0;
+
+  // set boolean flag activated if first connection of each image node is stored in GPU memory 
+  virtual void setFirstOutConnInDevice(bool first_out_conn_in_device) = 0;
   
   // return reference to vector of first connections outgoing from each image node [n_image_node]
   virtual const std::vector<int64_t> &getFirstOutConnection() const  = 0;
@@ -1463,7 +1466,13 @@ public:
   {
     return first_out_conn_in_device_;
   }
-  
+
+  // set boolean flag activated if first connection of each image node is stored in GPU memory 
+  void setFirstOutConnInDevice(bool first_out_conn_in_device)
+  {
+    first_out_conn_in_device_ = first_out_conn_in_device;
+  }
+
   // return reference to vector of first connections outgoing from each image node [n_image_node]
   const std::vector<int64_t> &getFirstOutConnection() const
   {
