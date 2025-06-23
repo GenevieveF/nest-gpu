@@ -112,6 +112,9 @@ enum KernelBoolParamIndexes
   i_mpi_bitpack,
   i_max_n_ports_warning,
   i_first_out_conn_in_device,
+  i_have_n_out_conn,
+  i_delete_remote_node_map,
+  i_delete_image_node_map,
   N_KERNEL_BOOL_PARAM
 };
 
@@ -145,7 +148,10 @@ const std::string kernel_bool_param_name[ N_KERNEL_BOOL_PARAM ] = {
   "check_node_maps",
   "mpi_bitpack",
   "max_n_ports_warning",
-  "first_out_conn_in_device"
+  "first_out_conn_in_device",
+  "have_n_out_conn",
+  "delete_remote_node_map",
+  "delete_image_node_map"
 };
 
 int
@@ -187,7 +193,12 @@ NESTGPU::NESTGPU()
 
   conn_ = nullptr;
   check_node_maps_ = false;
-  first_out_conn_in_device_ = true;
+  first_out_conn_in_device_ = false; //true;
+
+  have_n_out_conn_ = true;
+  delete_remote_node_map_ = false;
+  delete_image_node_map_ = false;
+
   // by default, connection structure type used is the 12-byte type
   setConnStructType( i_conn12b );
   // setConnStructType( i_conn16b );
@@ -394,7 +405,13 @@ NESTGPU::setConnStructType( int conn_struct_type )
   conn_->InitTimers();
   conn_->check_node_maps_ = check_node_maps_;
   conn_->setFirstOutConnInDevice(first_out_conn_in_device_);
-  
+
+  gpuErrchk( cudaMemcpyToSymbolAsync( input_spike_buffer_ns::have_n_out_conn_, &have_n_out_conn_, sizeof( bool ) ) );
+
+  conn_->setHaveNOutConn(have_n_out_conn_);
+  conn_->setDeleteRemoteNodeMap(delete_remote_node_map_);
+  conn_->setDeleteImageNodeMap(delete_image_node_map_);
+
   return 0;
 }
 
@@ -490,7 +507,7 @@ NESTGPU::Calibrate()
   max_remote_spike_num_ = max_spike_per_host_ * n_hosts_ * max_remote_spike_num_fact_;
   max_remote_spike_num_ = ( max_remote_spike_num_ > 1 ) ? max_remote_spike_num_ : 1;
   
-  conn_->initInputSpikeBuffer( GetNLocalNodes(), GetNTotalNodes(), max_remote_spike_num_ );
+  // conn_->initInputSpikeBuffer( GetNLocalNodes(), GetNTotalNodes(), max_remote_spike_num_ );
 
   PRINT_TIME;
   
@@ -550,6 +567,11 @@ NESTGPU::Calibrate()
     //conn_->remoteConnectionMapSave();
   }
 
+  conn_->initInputSpikeBuffer( GetNLocalNodes(), GetNTotalNodes(), max_remote_spike_num_ );
+  
+  PRINT_TIME;
+
+  
   if ( conn_->getRevConnFlag() )
   {
     conn_->revSpikeInit( GetNLocalNodes() );
@@ -2290,6 +2312,12 @@ NESTGPU::GetBoolParam( std::string param_name )
     return max_n_ports_warning_;
   case i_first_out_conn_in_device:
     return first_out_conn_in_device_;
+  case i_have_n_out_conn:
+    return have_n_out_conn_;
+  case i_delete_remote_node_map:
+    return delete_remote_node_map_;
+  case i_delete_image_node_map:
+    return delete_image_node_map_;    
   default:
     throw ngpu_exception( std::string( "Unrecognized kernel boolean parameter " ) + param_name );
   }
@@ -2324,6 +2352,19 @@ NESTGPU::SetBoolParam( std::string param_name, bool val )
   case i_first_out_conn_in_device:
     first_out_conn_in_device_ = val;
     conn_->setFirstOutConnInDevice( val );
+    break;
+  case i_have_n_out_conn:
+    have_n_out_conn_ = val;
+    conn_->setHaveNOutConn(val);
+    gpuErrchk( cudaMemcpyToSymbolAsync( input_spike_buffer_ns::have_n_out_conn_, &have_n_out_conn_, sizeof( bool ) ) );
+    break;
+  case i_delete_remote_node_map:
+    delete_remote_node_map_ = val;
+    conn_->setDeleteRemoteNodeMap(val);
+    break;
+  case i_delete_image_node_map:
+    delete_image_node_map_ = val;
+    conn_->setDeleteImageNodeMap(val);
     break;
   default:
     throw ngpu_exception( std::string( "Unrecognized kernel boolean parameter " ) + param_name );

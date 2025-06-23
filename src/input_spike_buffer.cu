@@ -42,6 +42,8 @@ __device__ float* spike_mul_;
 // number of spikes emitted at current time step
 __device__ int* n_spikes_;
 
+__device__ bool have_n_out_conn_;
+
 // Initialize input spike buffer pointers in device memory
 __global__ void
 initInputSpikeBufferPointersKernel( int* n_input_ports,

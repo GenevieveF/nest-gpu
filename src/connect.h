@@ -414,6 +414,12 @@ public:
 
   // set boolean flag activated if first connection of each image node is stored in GPU memory 
   virtual void setFirstOutConnInDevice(bool first_out_conn_in_device) = 0;
+
+  virtual void setHaveNOutConn(bool have_n_out_conn) = 0;
+  
+  virtual void setDeleteRemoteNodeMap(bool delete_remote_node_map) = 0;
+  
+  virtual void setDeleteImageNodeMap(bool delete_image_node_map) = 0;
   
   // return reference to vector of first connections outgoing from each image node [n_image_node]
   virtual const std::vector<int64_t> &getFirstOutConnection() const  = 0;
@@ -874,6 +880,12 @@ class ConnectionTemplate : public Connection
   // vector of the number of connections to send each spike from a remote node at current time step 
   std::vector<int> h_spike_n_connections_;
   int n_spike_from_host_;
+
+  bool have_n_out_conn_;
+
+  bool delete_remote_node_map_;
+
+  bool delete_image_node_map_;
   
   // method to get the the index of the first connection outgoing from each image node in CPU memory
   int getFirstOutConnectionInHost(inode_t n_local_nodes, inode_t n_total_nodes);
@@ -1479,6 +1491,21 @@ public:
     first_out_conn_in_device_ = first_out_conn_in_device;
   }
 
+  void setHaveNOutConn(bool have_n_out_conn)
+  {
+    have_n_out_conn_ = have_n_out_conn;
+  }
+  
+  void setDeleteRemoteNodeMap(bool delete_remote_node_map)
+  {
+    delete_remote_node_map_ = delete_remote_node_map;
+  }
+  
+  void setDeleteImageNodeMap(bool delete_image_node_map)
+  {
+    delete_image_node_map_ = delete_image_node_map;
+  }
+  
   // return reference to vector of first connections outgoing from each image node [n_image_node]
   const std::vector<int64_t> &getFirstOutConnection() const
   {

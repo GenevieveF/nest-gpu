@@ -108,9 +108,9 @@ PushSpike( int i_spike_buffer, float mul )
       uint pos = atomicAdd( input_spike_buffer_ns::n_spikes_, 1 );
       spike_first_connection_[ pos ] = i_conn;
       spike_mul_[ pos ] = mul;
-#ifdef HAVE_N_OUT_CONNECTIONS
-      spike_n_connections_[ pos ] = n_out_connections_[ i_spike_buffer ];
-#endif
+      if (input_spike_buffer_ns::have_n_out_conn_) {
+	spike_n_connections_[ pos ] = n_out_connections_[ i_spike_buffer ];
+      }
       //printf("PushSpike i_spike_buffer: %d\ti_conn: %ld\tpos: %d\tspike_first_connection[pos]: %ld\n",
       //i_spike_buffer, i_conn, pos, spike_first_connection_[pos]);
     }
