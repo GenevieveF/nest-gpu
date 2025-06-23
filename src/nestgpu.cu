@@ -193,7 +193,7 @@ NESTGPU::NESTGPU()
 
   conn_ = nullptr;
   check_node_maps_ = false;
-  first_out_conn_in_device_ = false; //true;
+  first_out_conn_in_device_ = true;
 
   have_n_out_conn_ = true;
   delete_remote_node_map_ = false;

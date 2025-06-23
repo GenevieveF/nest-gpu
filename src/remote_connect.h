@@ -1001,6 +1001,41 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectionMapCalibrate( inode
   }
   PRINT_TIME;
 
+
+  if (delete_remote_node_map_ || delete_image_node_map_) {
+    for ( int i_host = 0; i_host < n_hosts_; i_host++ ) { // loop on hosts
+      // loop on remote-source-node-to-local-image-node map blocks
+      uint n_map_blocks =  h_remote_source_node_map_[0][i_host].size();
+      for (uint ib=0; ib<n_map_blocks; ib++) {
+	if (delete_remote_node_map_) {
+	  CUDAFREECTRL("d_remote_src_node_blk_pt", h_remote_source_node_map_[0][i_host][ib]);
+	}
+	if (delete_image_node_map_) {
+	  CUDAFREECTRL("d_local_src_node_blk_pt", h_image_node_map_[0][i_host][ib]);
+	}
+      }
+    }
+
+    for (uint group_local_id=1; group_local_id<nhg; group_local_id++) {
+      uint nh = host_group_[group_local_id].size(); // number of hosts in the group
+      for ( uint gi_host = 0; gi_host < nh; gi_host++ ) {// loop on hosts
+	int src_host = host_group_[group_local_id][gi_host];
+	if ( src_host != this_host_ ) { // skip self host
+	  // loop on remote-source-node-to-local-image-node map blocks
+	  uint n_map_blocks =  h_remote_source_node_map_[group_local_id][gi_host].size();
+	  for (uint ib=0; ib<n_map_blocks; ib++) {
+	    if (delete_remote_node_map_) {
+	      CUDAFREECTRL("d_remote_src_node_blk_pt", h_remote_source_node_map_[group_local_id][gi_host][ib]);
+	    }
+	    if (delete_image_node_map_) {
+	      CUDAFREECTRL("d_local_src_node_blk_pt", h_image_node_map_[group_local_id][gi_host][ib]);
+	    }
+	  }
+	}
+      }
+    }
+  }
+
   return 0;
 }
 
