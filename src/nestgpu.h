@@ -274,7 +274,11 @@ class NESTGPU
   double SendSpikeToRemote_time_;
 
   double RecvSpikeFromRemote_time_;
+  
+  double CopySpikeFromRemote_time_;
 
+  double DeliverSpikesToInputBuffers_time_;
+  
   double NestedLoop_time_;
 
   double GetSpike_time_;

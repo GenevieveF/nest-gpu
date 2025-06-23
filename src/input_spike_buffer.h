@@ -779,14 +779,17 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::deliverSpikes()
   gpuErrchk( cudaMemcpy( &n_spikes, d_n_spikes_, sizeof( int ), cudaMemcpyDeviceToHost ) );
 
   if (n_spike_from_host_ > 0) {
-    gpuErrchk( cudaMemcpy( d_spike_first_connection_ + n_spikes, &h_spike_first_connection_[0], n_spike_from_host_ * sizeof( int64_t ), cudaMemcpyHostToDevice ) );
-    gpuErrchk( cudaMemcpy( d_spike_n_connections_ + n_spikes, &h_spike_n_connections_[0], n_spike_from_host_ * sizeof( int ), cudaMemcpyHostToDevice ) );
+    gpuErrchk( cudaMemcpyAsync( d_spike_first_connection_ + n_spikes, &h_spike_first_connection_[0], n_spike_from_host_ * sizeof( int64_t ), cudaMemcpyHostToDevice ) );
+    DBGCUDASYNC;
+    gpuErrchk( cudaMemcpyAsync( d_spike_n_connections_ + n_spikes, &h_spike_n_connections_[0], n_spike_from_host_ * sizeof( int ), cudaMemcpyHostToDevice ) );
+    DBGCUDASYNC;
     // for now spike multiplicity from remote nodes is assumed to be one
     initSpikeMulKernel<<< ( n_spike_from_host_ + 1023 ) / 1024, 1024 >>>( n_spike_from_host_, d_spike_mul_ + n_spikes );
     DBGCUDASYNC;
 
     n_spikes += n_spike_from_host_;
-    gpuErrchk( cudaMemcpy( d_n_spikes_, &n_spikes, sizeof( int ), cudaMemcpyHostToDevice ) );
+    gpuErrchk( cudaMemcpyAsync( d_n_spikes_, &n_spikes, sizeof( int ), cudaMemcpyHostToDevice ) );
+    DBGCUDASYNC;
   }
   
   if ( n_spikes > 0 )

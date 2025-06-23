@@ -243,6 +243,9 @@ NESTGPU::NESTGPU()
   organizeExternalSpike_time_ = 0;
   SendSpikeToRemote_time_ = 0;
   RecvSpikeFromRemote_time_ = 0;
+  CopySpikeFromRemote_time_ = 0;
+  DeliverSpikesToInputBuffers_time_ = 0;
+
   NestedLoop_time_ = 0;
   GetSpike_time_ = 0;
   SpikeReset_time_ = 0;
@@ -655,6 +658,9 @@ NESTGPU::PrintTimers(int verbosity_level)
     std::cout << HostIdStr() << "  organizeExternalSpike_time: " << organizeExternalSpike_time_ << "\n";
     std::cout << HostIdStr() << "  SendSpikeToRemote_time: " << SendSpikeToRemote_time_ << "\n";
     std::cout << HostIdStr() << "  RecvSpikeFromRemote_time: " << RecvSpikeFromRemote_time_ << "\n";
+    std::cout << HostIdStr() << "  CopySpikeFromRemote_time: " << CopySpikeFromRemote_time_ << "\n";
+    std::cout << HostIdStr() << "  DeliverSpikesToInputBuffers_time: " << DeliverSpikesToInputBuffers_time_ << "\n";
+    
     std::cout << HostIdStr() << "  NestedLoop_time: " << NestedLoop_time_ << "\n";
     std::cout << HostIdStr() << "  GetSpike_time: " << GetSpike_time_ << "\n";
     std::cout << HostIdStr() << "  SpikeReset_time: " << SpikeReset_time_ << "\n";
@@ -779,12 +785,17 @@ NESTGPU::SimulationStep()
     time_mark = getRealTime();
     RecvSpikeFromRemote();
     RecvSpikeFromRemote_time_ += ( getRealTime() - time_mark );
+    
+    time_mark = getRealTime();
     CopySpikeFromRemote();
+    CopySpikeFromRemote_time_ += ( getRealTime() - time_mark );
   }
   
   if ( conn_->getSpikeBufferAlgo() == INPUT_SPIKE_BUFFER_ALGO )
   {
+    time_mark = getRealTime();
     conn_->deliverSpikes();
+    DeliverSpikesToInputBuffers_time_ += ( getRealTime() - time_mark );
   }
   else
   {
