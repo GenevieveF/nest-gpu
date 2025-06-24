@@ -1,5 +1,5 @@
 #!/bin/bash
-nodes=96
+nodes=64
 if [ "$#" -ne 2 ]; then
     echo "Usage: $0 opt run"
     echo "opt [0-3]: optimization gpu-memory-vs-speed, 3 for no spike recording"
