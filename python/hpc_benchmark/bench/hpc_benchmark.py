@@ -415,14 +415,14 @@ def run_simulation():
     delete_remote_node_map = 1
     
     opt = params["opt"]
-    if opt=0:
+    if opt==0:
         first_out_conn_in_device = 0
         delete_image_node_map = 1
     else:
         first_out_conn_in_device = 1
         delete_image_node_map = 0
         
-    if opt=1:
+    if opt==1:
         have_n_out_conn = 0
     else:
         have_n_out_conn = 1
