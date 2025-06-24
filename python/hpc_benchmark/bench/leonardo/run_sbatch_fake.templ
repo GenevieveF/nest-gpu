@@ -30,6 +30,8 @@ fi
 out_dir=opt_${opt}_run_${run}
 mkdir -p $out_dir
 
+seed=12345${run}
+
 nodes=__nodes__
 proc_num=$(expr $nodes \* 4)
 
