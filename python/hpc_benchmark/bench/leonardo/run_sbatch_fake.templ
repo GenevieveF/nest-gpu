@@ -36,4 +36,4 @@ nodes=__nodes__
 proc_num=$(expr $nodes \* 4)
 
 srun python3 ../../hpc_benchmark.py --scale 20.0 --simtime 1000.0 --opt $opt --seed $seed --path $out_dir --fake_mpi_proc_num $proc_num --fake_mpi_proc_id -1
-sstat -j ${SLURM_JOB_ID}.0   --format=JobID,MaxVMSize > $out_dir/stat.dat
+sstat -j ${SLURM_JOB_ID}.0   --format='JobID,MaxVMSize' > $out_dir/stat.dat
