@@ -112,7 +112,7 @@ if args.fake_mpi_proc_num > 0:
     fake_mpi_proc_id = args.fake_mpi_proc_id
     if fake_mpi_proc_id < 0:
         fake_mpi_proc_id = int(os.environ['SLURM_PROCID'])
-    printf(f"Fake MPI proc id: {fake_mpi_proc_id}")
+    print(f"Fake MPI proc id: {fake_mpi_proc_id}")
     ngpu.FakeConnectMpiInit(args.fake_mpi_proc_num, fake_mpi_proc_id)
 else:
     ngpu.ConnectMpiInit()
