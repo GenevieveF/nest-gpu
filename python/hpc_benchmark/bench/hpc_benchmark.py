@@ -99,6 +99,9 @@ parser.add_argument("--simtime", type=float, default=250.0)
 parser.add_argument("--raster_plot", type=int, default=0)
 parser.add_argument("--record_spikes", type=int, default=1)
 parser.add_argument("--nhosts", type=int, default=0)
+parser.add_argument("--opt", type=int, default=2)
+parser.add_argument("--verbosity", type=int, default=1)
+
 
 args = parser.parse_args()
 
@@ -148,6 +151,8 @@ params = {
     'check_conns': False,    # Get ConnectionId objects after build. VERY SLOW!
     'use_dc_input': False,   # Use DC input instead of Poisson generators
     'verbose_log': False,    # Enable verbose output per MPI process
+    'opt': args.opt,         # Optimization gpu-memory-vs-speed [0-3]
+    'verbosity': args.verbosity,
 }
 
 
@@ -407,8 +412,23 @@ def run_simulation():
 
     time_start = perf_counter_ns()
 
+    delete_remote_node_map = 1
+    
+    opt = params["opt"]
+    if opt=0:
+        first_out_conn_in_device = 0
+        delete_image_node_map = 1
+    else:
+        first_out_conn_in_device = 1
+        delete_image_node_map = 0
+        
+    if opt=1:
+        have_n_out_conn = 0
+    else:
+        have_n_out_conn = 1
+
     ngpu.SetKernelStatus({
-        "verbosity_level": 1,
+        "verbosity_level": params["verbosity"],
         "rnd_seed": params["seed"],
         "time_resolution": params['dt'],
         "max_node_n_bits": 31,
@@ -416,8 +436,12 @@ def run_simulation():
         "max_spike_num_fact": 0.01,
         "max_spike_per_host_fact": 0.01,
         "min_allowed_delay": 1.5,
-        "max_n_ports_warning": False        
-        })
+        "max_n_ports_warning": False,
+        "first_out_conn_in_device": first_out_conn_in_device,
+        "have_n_out_conn": have_n_out_conn,
+        "delete_remote_node_map": delete_remote_node_map,
+        "delete_image_node_map": delete_image_node_map
+    })
     
     seed = ngpu.GetKernelStatus("rnd_seed")
     
