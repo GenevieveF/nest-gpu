@@ -40,3 +40,4 @@ seed=12345${run}
 
 
 srun python3 ../../hpc_benchmark.py --scale 20.0 --simtime 1000.0 --opt $opt --seed $seed --path $out_dir --record_spikes $record_spikes
+sacct -j ${SLURM_JOB_ID}.0   --format='JobID,MaxVMSize' > $out_dir/stat.dat
