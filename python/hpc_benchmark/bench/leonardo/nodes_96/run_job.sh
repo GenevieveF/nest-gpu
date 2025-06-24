@@ -6,5 +6,6 @@ if [ "$#" -ne 2 ]; then
     echo "run [0-9]: run number (changes output folder and random seed)"
 else
     cat ../run_sbatch.templ | sed "s/__nodes__/$nodes/" > run_sbatch.sh
-    sbatch run_sbatch.sh
+    echo "sbatch run_sbatch.sh $1 $2"
+    sbatch run_sbatch.sh $1 $2
 fi
