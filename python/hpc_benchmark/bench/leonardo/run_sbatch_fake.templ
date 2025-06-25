@@ -35,7 +35,7 @@ seed=12345${run}
 nodes=__nodes__
 proc_num=$(expr $nodes \* 4)
 
-max_spike_per_host_fact=$(echo "scale=4; 1.0/$nodes" | bc -l)
+max_spike_per_host_fact=$(echo "scale=6; 1.0/$nodes" | bc -l)
 if (( $(bc <<< "$max_spike_per_host_fact>0.01") )) ; then
     max_spike_per_host_fact=0.01
 fi
