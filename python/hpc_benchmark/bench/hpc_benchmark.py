@@ -101,7 +101,8 @@ parser.add_argument("--record_spikes", type=int, default=1)
 parser.add_argument("--nhosts", type=int, default=0)
 parser.add_argument("--opt", type=int, default=2)
 parser.add_argument("--verbosity", type=int, default=1)
-
+parser.add_argument("--max_spike_num_fact", type=float, default=0.01)
+parser.add_argument("--max_spike_per_host_fact", type=float, default=0.01)
 
 args = parser.parse_args()
 
@@ -157,6 +158,8 @@ params = {
     'verbose_log': False,    # Enable verbose output per MPI process
     'opt': args.opt,         # Optimization gpu-memory-vs-speed [0-3]
     'verbosity': args.verbosity,
+    'max_spike_num_fact': args.max_spike_num_fact, # factor used to set the maximum number of spikes in a time step
+    'max_spike_per_host_fact': args.max_spike_per_host_fact, # factor used to set the maximum number of remote spikes in a time step
 }
 
 
@@ -437,8 +440,8 @@ def run_simulation():
         "time_resolution": params['dt'],
         "max_node_n_bits": 31,
         "max_syn_n_bits": 0,
-        "max_spike_num_fact": 0.01,
-        "max_spike_per_host_fact": 0.01,
+        "max_spike_num_fact": params["max_spike_num_fact"],
+        "max_spike_per_host_fact": params["max_spike_per_host_fact"],
         "min_allowed_delay": 1.5,
         "max_n_ports_warning": False,
         "first_out_conn_in_device": first_out_conn_in_device,
