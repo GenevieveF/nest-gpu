@@ -38,6 +38,13 @@ fi
 
 seed=12345${run}
 
+nodes=__nodes__
+proc_num=$(expr $nodes \* 4)
 
-srun python3 ../../hpc_benchmark.py --scale 20.0 --simtime 1000.0 --opt $opt --seed $seed --path $out_dir --record_spikes $record_spikes
+max_spike_per_host_fact=$(echo "scale=6; 1.0/$nodes" | bc -l)
+if (( $(bc <<< "$max_spike_per_host_fact>0.01") )) ; then
+    max_spike_per_host_fact=0.01
+fi
+
+srun python3 ../../hpc_benchmark.py --scale 20.0 --simtime 1000.0 --opt $opt --seed $seed --path $out_dir --max_spike_per_host_fact $max_spike_per_host_fact --record_spikes $record_spikes
 sacct -j ${SLURM_JOB_ID}.0   --format='JobID,MaxVMSize' > $out_dir/stat.dat
