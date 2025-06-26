@@ -87,6 +87,7 @@ enum KernelFloatParamIndexes
   i_max_spike_per_host_fact,
   i_max_remote_spike_num_fact,
   i_min_allowed_delay,
+  i_use_all_source_node_fact,
   N_KERNEL_FLOAT_PARAM
 };
 
@@ -129,6 +130,7 @@ const std::string kernel_float_param_name[ N_KERNEL_FLOAT_PARAM ] = { "time_reso
   "max_spike_num_fact",
   "max_spike_per_host_fact",
   "max_remote_spike_num_fact",
+  "use_all_source_node_fact",
   "min_allowed_delay"
 };
 
@@ -199,6 +201,8 @@ NESTGPU::NESTGPU()
   delete_remote_node_map_ = false;
   delete_image_node_map_ = false;
 
+  use_all_source_node_fact_ = 2.0;
+  
   // by default, connection structure type used is the 12-byte type
   setConnStructType( i_conn12b );
   // setConnStructType( i_conn16b );
@@ -411,6 +415,7 @@ NESTGPU::setConnStructType( int conn_struct_type )
   conn_->setHaveNOutConn(have_n_out_conn_);
   conn_->setDeleteRemoteNodeMap(delete_remote_node_map_);
   conn_->setDeleteImageNodeMap(delete_image_node_map_);
+  conn_->setUseAllSourceNodeFact(use_all_source_node_fact_);
 
   return 0;
 }
@@ -2440,6 +2445,8 @@ NESTGPU::GetFloatParam( std::string param_name )
     return max_remote_spike_num_fact_;
   case i_min_allowed_delay:
     return conn_->getMinAllowedDelay();
+  case i_use_all_source_node_fact:
+    return use_all_source_node_fact_;
   default:
     throw ngpu_exception( std::string( "Unrecognized kernel float parameter " ) + param_name );
   }
@@ -2467,6 +2474,10 @@ NESTGPU::SetFloatParam( std::string param_name, float val )
     break;
   case i_min_allowed_delay:
     conn_->setMinAllowedDelay(val);
+    break;
+  case i_use_all_source_node_fact:
+    use_all_source_node_fact_ = val;
+    conn_->setUseAllSourceNodeFact(val);
     break;
   default:
     throw ngpu_exception( std::string( "Unrecognized kernel float parameter " ) + param_name );

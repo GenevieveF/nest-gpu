@@ -440,6 +440,7 @@ def run_simulation():
         "time_resolution": params['dt'],
         "max_node_n_bits": 31,
         "max_syn_n_bits": 0,
+        "use_all_source_node_fact": 0.0,
         "max_spike_num_fact": params["max_spike_num_fact"],
         "max_spike_per_host_fact": params["max_spike_per_host_fact"],
         "min_allowed_delay": 1.5,

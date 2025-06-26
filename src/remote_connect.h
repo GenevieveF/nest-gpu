@@ -3099,7 +3099,6 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
     }
   }
 
-  float used_all_source_node_threshold_fact = 2.0;
   // arrays of source and target nodes of each source and target host in GPU memory
   // They can be either the index of the first node of each source/target group
   // or pointers to arrays of indexes
@@ -3402,7 +3401,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
     // indexes and fills them with weights, delays, syn_geoups, ports
     ConnSpec conn_spec(ASSIGNED_NODES, n_new_conn);
     // printf("this_host: %d\tish: %d\tn_source_arr[ish]: %d\n",  this_host_, ish, n_source_arr[ish]);
-    if (n_new_conn >= (int)(used_all_source_node_threshold_fact * n_source_arr[ish])) {
+    if (n_new_conn >= (int)(use_all_source_node_fact_ * n_source_arr[ish])) {
       conn_spec.use_all_remote_source_nodes_ = true;
     }
     double time_mark = getRealTime();

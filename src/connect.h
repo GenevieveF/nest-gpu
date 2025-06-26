@@ -420,6 +420,8 @@ public:
   virtual void setDeleteRemoteNodeMap(bool delete_remote_node_map) = 0;
   
   virtual void setDeleteImageNodeMap(bool delete_image_node_map) = 0;
+
+  virtual void setUseAllSourceNodeFact(float use_all_source_node_fact) = 0;
   
   // return reference to vector of first connections outgoing from each image node [n_image_node]
   virtual const std::vector<int64_t> &getFirstOutConnection() const  = 0;
@@ -886,6 +888,8 @@ class ConnectionTemplate : public Connection
   bool delete_remote_node_map_;
 
   bool delete_image_node_map_;
+
+  float use_all_source_node_fact_;
   
   // method to get the the index of the first connection outgoing from each image node in CPU memory
   int getFirstOutConnectionInHost(inode_t n_local_nodes, inode_t n_total_nodes);
@@ -1504,6 +1508,11 @@ public:
   void setDeleteImageNodeMap(bool delete_image_node_map)
   {
     delete_image_node_map_ = delete_image_node_map;
+  }
+
+  void setUseAllSourceNodeFact(float use_all_source_node_fact)
+  {
+    use_all_source_node_fact_ = use_all_source_node_fact;
   }
   
   // return reference to vector of first connections outgoing from each image node [n_image_node]
@@ -3379,7 +3388,6 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_Connect( curandGenerator_t& gen,
     rev_conn_flag_ = true;
   }
 
-  float used_all_source_node_threshold_fact = 2.0;
   switch ( conn_spec.rule_ )
   {
   case ONE_TO_ONE:
@@ -3398,14 +3406,14 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_Connect( curandGenerator_t& gen,
     return connectAllToAll< T1, T2 >( gen, source, n_source, target, n_target, syn_spec, remote_source_flag );
     break;
   case FIXED_TOTAL_NUMBER:
-    if (conn_spec.total_num_ >= (int)(used_all_source_node_threshold_fact*n_source)) {
+    if (conn_spec.total_num_ >= (int)(use_all_source_node_fact_*n_source)) {
       conn_spec.use_all_remote_source_nodes_ = true;
     }
     return connectFixedTotalNumber< T1, T2 >(
       gen, source, n_source, target, n_target, conn_spec.total_num_, syn_spec, remote_source_flag );
     break;
   case FIXED_INDEGREE:
-    if (conn_spec.indegree_ * n_target >= (uint)(used_all_source_node_threshold_fact*n_source)) {
+    if (conn_spec.indegree_ * n_target >= (uint)(use_all_source_node_fact_*n_source)) {
       conn_spec.use_all_remote_source_nodes_ = true;
     }
     return connectFixedIndegree< T1, T2 >(
