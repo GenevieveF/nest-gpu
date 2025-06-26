@@ -130,8 +130,8 @@ const std::string kernel_float_param_name[ N_KERNEL_FLOAT_PARAM ] = { "time_reso
   "max_spike_num_fact",
   "max_spike_per_host_fact",
   "max_remote_spike_num_fact",
-  "use_all_source_node_fact",
-  "min_allowed_delay"
+  "min_allowed_delay",
+  "use_all_source_node_fact"
 };
 
 const std::string kernel_int_param_name[ N_KERNEL_INT_PARAM ] = { "rnd_seed",
