@@ -146,7 +146,7 @@ params = {
     'presimtime': 50.,       # simulation time until reaching equilibrium
     'dt': 0.1,               # simulation step
     'stdp': False,           # enable plastic connections [feature not properlyly implemented yet!]
-    'record_spikes': (args.record_spikes != 0) ,  # switch to record spikes of excitatory
+    'record_spikes': (args.record_spikes != 0 and args.opt < 3) ,  # switch to record spikes of excitatory
                              # neurons to file
     'show_plot': False,      # switch to show plot at the end of simulation
                              # disabled by default for benchmarking
