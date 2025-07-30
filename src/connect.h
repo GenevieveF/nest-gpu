@@ -4934,15 +4934,16 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::getFirstOutConnectionInHost
       int64_t i_conn_1 = search_block_array_down<ConnKeyT>(&conn_key_vect_[0], n_conn_, conn_block_size_, conn_key_1);
       // number of connections with source index >= i_node_0 and < i_node_1
       int64_t n_conn = i_conn_1 - i_conn_0;
-
-      // get index of first outgoing connection for each node index in the block
-      // (remains -1 for nodes without outgoing connections) 
-      input_spike_buffer_ns::getFirstOutConnectionKernel< ConnKeyT > <<< ( n_conn + 1023 ) / 1024, 1024 >>>
-	( i_node_0, i_conn_0, n_conn, d_first_out_connection_, n_nodes, this_host_ );
-      DBGCUDASYNC;
-      // copy d_first_out_connection_ to the appropriate slice of h_first_out_connection_ in CPU memory
-      gpuErrchk( cudaMemcpy( &h_first_out_connection_[i_node_0 - n_local_nodes], d_first_out_connection_,
-			     n_nodes * sizeof( int64_t ), cudaMemcpyDeviceToHost ) );
+      if (n_conn > 0) {
+	// get index of first outgoing connection for each node index in the block
+	// (remains -1 for nodes without outgoing connections) 
+	input_spike_buffer_ns::getFirstOutConnectionKernel< ConnKeyT > <<< ( n_conn + 1023 ) / 1024, 1024 >>>
+	  ( i_node_0, i_conn_0, n_conn, d_first_out_connection_, n_nodes, this_host_ );
+	DBGCUDASYNC;
+	// copy d_first_out_connection_ to the appropriate slice of h_first_out_connection_ in CPU memory
+	gpuErrchk( cudaMemcpy( &h_first_out_connection_[i_node_0 - n_local_nodes], d_first_out_connection_,
+			       n_nodes * sizeof( int64_t ), cudaMemcpyDeviceToHost ) );
+      }
     }
 
     // compute the number of connections outgoing from each image node
