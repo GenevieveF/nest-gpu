@@ -3406,14 +3406,14 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_Connect( curandGenerator_t& gen,
     return connectAllToAll< T1, T2 >( gen, source, n_source, target, n_target, syn_spec, remote_source_flag );
     break;
   case FIXED_TOTAL_NUMBER:
-    if (conn_spec.total_num_ >= (int)(use_all_source_node_fact_*n_source)) {
+    if ((double)conn_spec.total_num_ >= (use_all_source_node_fact_*n_source)) {
       conn_spec.use_all_remote_source_nodes_ = true;
     }
     return connectFixedTotalNumber< T1, T2 >(
       gen, source, n_source, target, n_target, conn_spec.total_num_, syn_spec, remote_source_flag );
     break;
   case FIXED_INDEGREE:
-    if (conn_spec.indegree_ * n_target >= (uint)(use_all_source_node_fact_*n_source)) {
+    if ((double)(conn_spec.indegree_ * n_target) >= (use_all_source_node_fact_*n_source)) {
       conn_spec.use_all_remote_source_nodes_ = true;
     }
     return connectFixedIndegree< T1, T2 >(

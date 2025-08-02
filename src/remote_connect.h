@@ -886,7 +886,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectionMapCalibrate( inode
 
   PRINT_TIME;
   
-  std::vector<uint> tmp_node_map;
+  std::vector<int64_t> tmp_node_map;
   //tmp_node_map.resize(src_node_max);
 
   for (uint group_local_id=1; group_local_id<nhg; group_local_id++) {
@@ -3252,7 +3252,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
   copass_sort::sort< ConnKeyT, ConnStructT >
     (&conn_key_vect_[ib0], &conn_struct_vect_[ib0], n_new_conn_tot,
      conn_block_size_, nullptr, sort_storage_bytes, i_conn0 );
-  printf( "xxx storage bytes: %ld\n", sort_storage_bytes );
+  //printf( "xxx storage bytes: %ld\n", sort_storage_bytes );
   CUDAREALLOCIFSMALLER( "&d_ru_storage_", &d_ru_storage_, sort_storage_bytes, sort_storage_bytes / 4 );
 
   // printf( "Sorting...\n" );
@@ -3401,7 +3401,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::_ConnectDistributedFixedIndegree
     // indexes and fills them with weights, delays, syn_geoups, ports
     ConnSpec conn_spec(ASSIGNED_NODES, n_new_conn);
     // printf("this_host: %d\tish: %d\tn_source_arr[ish]: %d\n",  this_host_, ish, n_source_arr[ish]);
-    if (n_new_conn >= (int)(use_all_source_node_fact_ * n_source_arr[ish])) {
+    if ((double)n_new_conn >= (use_all_source_node_fact_ * n_source_arr[ish])) {
       conn_spec.use_all_remote_source_nodes_ = true;
     }
     double time_mark = getRealTime();
