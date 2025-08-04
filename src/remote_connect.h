@@ -846,6 +846,7 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::remoteConnectionMapCalibrate( inode
 	host_group_source_node_vect_[group_local_id][gi_host].resize(n_src);
 	std::copy(host_group_source_node_[group_local_id][gi_host].begin(), host_group_source_node_[group_local_id][gi_host].end(),
 		  host_group_source_node_vect_[group_local_id][gi_host].begin());
+	host_group_source_node_[group_local_id][gi_host].clear();
       }
       
       host_group_local_node_index_[group_local_id][gi_host].resize(n_src);

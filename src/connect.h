@@ -4423,7 +4423,9 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::freeConnRandomGenerator()
     {
       for ( int j_host = 0; j_host < n_hosts_; j_host++ )
       {
-        CURAND_CALL( curandDestroyGenerator( conn_random_generator_[ i_host ][ j_host ] ) );
+	if (conn_random_generator_[ i_host ][ j_host ] != nullptr) { 
+	  CURAND_CALL( curandDestroyGenerator( conn_random_generator_[ i_host ][ j_host ] ) );
+	}
       }
     }
   }
@@ -4438,10 +4440,12 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::initConnRandomGenerator()
   conn_random_generator_.resize( n_hosts_ );
   for ( int i_host = 0; i_host < n_hosts_; i_host++ )
   {
-    conn_random_generator_[ i_host ].resize( n_hosts_ );
+    conn_random_generator_[ i_host ].resize( n_hosts_, nullptr );
     for ( int j_host = 0; j_host < n_hosts_; j_host++ )
     {
-      CURAND_CALL( curandCreateGenerator( &conn_random_generator_[ i_host ][ j_host ], CURAND_RNG_PSEUDO_DEFAULT ) );
+      if (i_host==this_host_ || j_host==this_host_) { 
+	CURAND_CALL( curandCreateGenerator( &conn_random_generator_[ i_host ][ j_host ], CURAND_RNG_PSEUDO_DEFAULT ) );
+      }
     }
   }
 
@@ -4478,8 +4482,11 @@ ConnectionTemplate< ConnKeyT, ConnStructT >::setRandomSeed( unsigned long long s
   {
     for ( int j_host = 0; j_host < n_hosts_; j_host++ )
     {
-      CURAND_CALL( curandSetPseudoRandomGeneratorSeed(
-        conn_random_generator_[ i_host ][ j_host ], seed + conn_seed_offset_ + i_host * n_hosts_ + j_host ) );
+      if (i_host==this_host_ || j_host==this_host_) { 
+	CURAND_CALL( curandSetPseudoRandomGeneratorSeed
+		     (conn_random_generator_[ i_host ][ j_host ],
+		      seed + conn_seed_offset_ + i_host * n_hosts_ + j_host ) );
+      }
     }
   }
 
@@ -4535,8 +4542,10 @@ template < class ConnKeyT, class ConnStructT >
 int
 ConnectionTemplate< ConnKeyT, ConnStructT >::setThisHost( int this_host )
 {
+  freeConnRandomGenerator();
   this_host_ = this_host;
-
+  initConnRandomGenerator();
+  
   return 0;
 }
 
