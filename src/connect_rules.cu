@@ -36,6 +36,8 @@ ConnSpec::Init()
   total_num_ = 0;
   indegree_ = 0;
   outdegree_ = 0;
+  use_all_remote_source_nodes_ = false;
+  
   return 0;
 }
 
@@ -57,7 +59,7 @@ ConnSpec::Init( int rule, int degree /*=0*/ )
     throw ngpu_exception( std::string( "Connection rule " ) + conn_rule_name[ rule ] + " does not have a degree" );
   }
   rule_ = rule;
-  if ( rule == FIXED_TOTAL_NUMBER )
+  if ( rule == FIXED_TOTAL_NUMBER || rule == ASSIGNED_NODES )
   {
     total_num_ = degree;
   }
@@ -597,3 +599,86 @@ NESTGPU::RemoteConnect( int i_source_host,
   return RemoteConnect(
     i_source_host, source.data(), source.size(), i_target_host, target.data(), target.size(), i_host_group, conn_spec, syn_spec );
 }
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+// Build connections with fixed indegree rule for source neurons and target neurons distributed across
+// MPI processes (hosts)
+// Case with both source and target nodes contiguous, represented by starting index and number of nodes 
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+int NESTGPU::ConnectDistributedFixedIndegree
+(int *source_host_arr, int n_source_host, inode_t *source_arr, inode_t *n_source_arr,
+ int *target_host_arr, int n_target_host, inode_t *target_arr, inode_t *n_target_arr,
+ int indegree, int i_host_group, SynSpec &syn_spec)
+{
+  CheckUncalibrated( "Connections cannot be created after calibration" );
+
+  int ret =
+    conn_->connectDistributedFixedIndegree
+    (source_host_arr, n_source_host, source_arr, n_source_arr, target_host_arr, n_target_host, target_arr, n_target_arr,
+     indegree, i_host_group, syn_spec);
+  
+  return ret;
+}
+  
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+// Build connections with fixed indegree rule for source neurons and target neurons distributed across
+// MPI processes (hosts)
+// Case with source nodes stored in an array,
+// target nodes contiguous, represented by starting index and number of nodes 
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+int NESTGPU::ConnectDistributedFixedIndegree
+(int *source_host_arr, int n_source_host, inode_t **source_arr, inode_t *n_source_arr,
+ int *target_host_arr, int n_target_host, inode_t *target_arr, inode_t *n_target_arr,
+ int indegree, int i_host_group, SynSpec &syn_spec)
+{
+  CheckUncalibrated( "Connections cannot be created after calibration" );
+
+  int ret =
+    conn_->connectDistributedFixedIndegree
+    (source_host_arr, n_source_host, source_arr, n_source_arr, target_host_arr, n_target_host, target_arr, n_target_arr,
+     indegree, i_host_group, syn_spec);
+  
+  return ret;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+// Build connections with fixed indegree rule for source neurons and target neurons distributed across
+// MPI processes (hosts)
+// Case with source nodes contiguous, represented by starting index and number of nodes,
+// target nodes stored in an array
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+int NESTGPU::ConnectDistributedFixedIndegree
+(int *source_host_arr, int n_source_host, inode_t *source_arr, inode_t *n_source_arr,
+ int *target_host_arr, int n_target_host, inode_t **target_arr, inode_t *n_target_arr,
+ int indegree, int i_host_group, SynSpec &syn_spec)
+{
+  CheckUncalibrated( "Connections cannot be created after calibration" );
+
+  int ret =
+    conn_->connectDistributedFixedIndegree
+    (source_host_arr, n_source_host, source_arr, n_source_arr, target_host_arr, n_target_host, target_arr, n_target_arr,
+     indegree, i_host_group, syn_spec);
+  
+  return ret;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+// Build connections with fixed indegree rule for source neurons and target neurons distributed across
+// MPI processes (hosts)
+// Case with both source nodes and target nodes stored in arrays
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+int NESTGPU::ConnectDistributedFixedIndegree
+(int *source_host_arr, int n_source_host, inode_t **source_arr, inode_t *n_source_arr,
+ int *target_host_arr, int n_target_host, inode_t **target_arr, inode_t *n_target_arr,
+ int indegree, int i_host_group, SynSpec &syn_spec)
+{
+  CheckUncalibrated( "Connections cannot be created after calibration" );
+
+  int ret =
+    conn_->connectDistributedFixedIndegree
+    (source_host_arr, n_source_host, source_arr, n_source_arr, target_host_arr, n_target_host, target_arr, n_target_arr,
+     indegree, i_host_group, syn_spec);
+  
+  return ret;
+}
+

@@ -39,6 +39,67 @@
 MPI_Request* recv_mpi_request;
 #endif
 
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// bit packing compression/decompression  used with MPI send/receive taken from 
+// https://stackoverflow.com/questions/49462207/how-to-compress-a-32-bit-array-elements-into-minimum-required-bit-elements
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+#define MASK32 ((uint64_t)0xffffffff)
+
+void bitPackWrite(uint32_t *arr, int bits, int i, int value) {
+    int bitoffset = i * bits;
+    int index = bitoffset / 32;
+    int shift = bitoffset % 32;
+    uint64_t maskbits = (~(uint64_t)0) >> (64-bits);
+    uint64_t twoval = ((uint64_t)arr[index+1]<<32) + arr[index];
+    twoval = twoval & ~(maskbits << shift) | ((value & maskbits) << shift);
+    arr[index] = (twoval & MASK32);
+    arr[index+1] = (twoval >> 32) & MASK32;
+}
+
+int bitPackRead(const uint32_t *arr, int bits, int i) {
+    int bitoffset = i * bits;
+    int index = bitoffset / 32;
+    int shift = bitoffset % 32;
+    uint64_t maskbits = (~(uint64_t)0) >> (64-bits);
+    int value = ((((uint64_t)arr[index+1]<<32) + arr[index]) >> shift) & maskbits;
+    return(value);
+}
+
+void  bitPackInPlace(uint32_t *arr, int size, int *packed_size_pt, int bits)
+{
+  *packed_size_pt = ( (size - 1) * bits ) / 32 + 2;
+  for(int i=0; i<size; i++) {
+    bitPackWrite(arr, bits, i, arr[i]);
+  }
+}
+
+int bitPackedSize(int size, int bits)
+{
+  if (size == 0) {
+    return 0;
+  }
+  else {
+    return  ( (size - 1) * bits ) / 32 + 2;
+  }
+}
+
+void  bitPackInPlace(uint32_t *arr, int size, int bits)
+{
+  for(int i=0; i<size; i++) {
+    bitPackWrite(arr, bits, i, arr[i]);
+  }
+}
+
+void  bitUnpackInPlace(uint32_t *arr, int size, int bits)
+{
+  for(int i=size-1; i>=0; i--) {
+    arr[i] = bitPackRead(arr, bits, i);
+  }
+}
+
+
+
 // Send spikes to remote MPI processes
 int
 NESTGPU::SendSpikeToRemote( int n_ext_spikes )
@@ -188,7 +249,10 @@ NESTGPU::RecvSpikeFromRemote()
   std::vector<MPI_Comm> &mpi_comm_vect = conn_->getMPIComm();
   uint nhg = host_group.size();
   std::vector<int> &host_group_local_id = conn_->getHostGroupLocalId();
-  
+  std::vector< std::vector< int > > &bit_pack_nbits = conn_->getBitPackNbits();
+  std::vector< int > &bit_pack_nbits_this_host = conn_->getBitPackNbitsThisHost();
+
+
   for (uint abs_ihg=0; abs_ihg<host_group_local_id.size(); abs_ihg++) {
     int ihg = host_group_local_id[abs_ihg];
     if (ihg < 0) {
@@ -197,14 +261,53 @@ NESTGPU::RecvSpikeFromRemote()
     int idx0 = h_ExternalHostGroupSpikeIdx0[ihg]; // position of subarray of spikes that must be sent to host group ihg
     uint* sendbuf = &h_ExternalHostGroupSpikeNodeId[idx0]; // send address
     int sendcount = h_ExternalHostGroupSpikeNum[ihg]; // send count
+    
     uint *recvbuf = &h_ExternalSourceSpikeNodeId[ihg][0]; //[ i_host * max_spike_per_host_ ] // receiving buffers
     int *recvcounts = &h_ExternalSourceSpikeNum[ihg][0];
     int *displs = &h_ExternalSourceSpikeDispl[0]; // displacememnts of receiving buffers, all equal to max_spike_per_host_
 
     MPI_Allgather(&sendcount, 1, MPI_INT, recvcounts, 1, MPI_INT, mpi_comm_vect[ihg-1]);
-    
-    MPI_Allgatherv(sendbuf, sendcount, MPI_INT, recvbuf, recvcounts, displs, MPI_INT, mpi_comm_vect[ihg-1]);
 
+    if (mpi_bitpack_) {
+      int sendcount_packed = 0;
+      if (sendcount > 0) {
+	double time_mark = getRealTime();
+	bitPackInPlace(sendbuf, sendcount, bit_pack_nbits_this_host[ihg]);
+	MpiBitPack_time_ += ( getRealTime() - time_mark );
+	sendcount_packed = bitPackedSize(sendcount, bit_pack_nbits_this_host[ihg]);
+      }
+      uint nh = host_group[ihg].size(); // number of hosts in the group
+      // loop on hosts
+      for ( uint gi_host = 0; gi_host < nh; gi_host++ ) {
+	int i_host = host_group[ihg][gi_host];
+	//if (i_host != this_host_) {
+	h_ExternalSourceSpikeNumBitPacked[ihg][gi_host] = bitPackedSize(h_ExternalSourceSpikeNum[ihg][gi_host],
+									  bit_pack_nbits[ihg][gi_host]);
+	//}
+      }      
+      int *recvcounts_packed = &h_ExternalSourceSpikeNumBitPacked[ihg][0];
+
+      MPI_Allgatherv(sendbuf, sendcount_packed, MPI_INT, recvbuf, recvcounts_packed, displs, MPI_INT, mpi_comm_vect[ihg-1]);
+
+      SpikeNumAllgather_send_ += sendcount;
+      SpikeNumAllgather_send_packed_ += sendcount_packed;
+      double time_mark = getRealTime();
+      // loop on hosts
+      for ( uint gi_host = 0; gi_host < nh; gi_host++ ) {
+	int i_host = host_group[ihg][gi_host];
+	if (i_host != this_host_) {
+	  SpikeNumAllgather_recv_packed_ += recvcounts_packed[i_host];
+	  SpikeNumAllgather_recv_ += recvcounts[i_host];
+	  uint *recvbuf_of_host = &h_ExternalSourceSpikeNodeId[ihg][ gi_host * max_spike_per_host_ ];
+	  int count = h_ExternalSourceSpikeNum[ihg][gi_host];
+	  bitUnpackInPlace(recvbuf_of_host, count, bit_pack_nbits[ihg][gi_host]);
+	}
+      }
+      MpiBitUnpack_time_ += ( getRealTime() - time_mark );
+    }
+    else {    
+      MPI_Allgatherv(sendbuf, sendcount, MPI_INT, recvbuf, recvcounts, displs, MPI_INT, mpi_comm_vect[ihg-1]);
+    }
   }
 
   /* 
@@ -245,7 +348,7 @@ NESTGPU::RecvSpikeFromRemote()
 }
 
 int
-NESTGPU::ConnectMpiInit( int argc, char* argv[] )
+NESTGPU::ConnectMpiInit()
 {
 #ifdef HAVE_MPI
   CheckUncalibrated( "MPI connections cannot be initialized after calibration" );
@@ -253,7 +356,7 @@ NESTGPU::ConnectMpiInit( int argc, char* argv[] )
   MPI_Initialized( &initialized );
   if ( !initialized )
   {
-    MPI_Init( &argc, &argv );
+    MPI_Init( nullptr, nullptr );
   }
   int n_hosts;
   int this_host;
@@ -264,7 +367,6 @@ NESTGPU::ConnectMpiInit( int argc, char* argv[] )
   setThisHost( this_host );
   //conn_->remoteConnectionMapInit();
   recv_mpi_request = new MPI_Request[ 2*n_hosts_ ];
-
   return 0;
 #else
   throw ngpu_exception( "MPI is not available in your build" );

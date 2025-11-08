@@ -356,17 +356,12 @@ copass_sort::sort_template( KeyArrayT key_array,
   d_aux_array_key_pt_ = getKeyPt( d_aux_array );
   d_aux_array_value_pt_ = getValuePt( d_aux_array );
 
-  //////////////////// serve???????!!!!!!!!!!
-  position_t tot_part_size = block_size;
+  position_t tot_part_size;
 
   ArrayT target_array[ k - 1 ];
   for ( uint i = 0; i < k - 1; i++ )
   {
     target_array[ i ] = h_subarray[ i ];
-    for ( uint j = i + 1; j < k; j++ )
-    {
-      target_array[ i ].size += h_subarray[ j ].size;
-    }
   }
 
   //////////////////////////////////////////////////////////
@@ -374,7 +369,8 @@ copass_sort::sort_template( KeyArrayT key_array,
   //////////////////////////////////////////////////////////
   for ( uint i_sub = 0; i_sub < k - 1; i_sub++ )
   {
-    threshold_range_kernel< KeyT, ArrayT, 1024 > <<< 1, k>>>( d_subarray, block_size, k, d_t_u, d_t_d );
+    tot_part_size = target_array[i_sub].size;
+    threshold_range_kernel< KeyT, ArrayT, 1024 > <<< 1, k>>>( d_subarray, tot_part_size, k, d_t_u, d_t_d );
 
     // DBGCUDASYNC
     CUDASYNC
@@ -389,7 +385,7 @@ copass_sort::sort_template( KeyArrayT key_array,
       printf( "kernel sum_m_u: %ld\tsum_m_d: %ld\n", h_sum_m_u, h_sum_m_d );
     }
     /////////////////////////////////////////////////////////////
-    if ( block_size >= h_sum_m_u )
+    if ( tot_part_size >= h_sum_m_u )
     { // m_u -> m_d
       search_multi_up< KeyT, ArrayT, 1024 >( d_subarray, k, d_t_u, d_mu_u, d_sum_mu_u );
       /////////////////////
@@ -433,7 +429,7 @@ copass_sort::sort_template( KeyArrayT key_array,
     }
 
     //////////////////////////////////////////////////////////////
-    else if ( block_size <= h_sum_m_d )
+    else if ( tot_part_size <= h_sum_m_d )
     {
       search_multi_down< KeyT, ArrayT, 1024 >( d_subarray, k, d_t_d, d_mu_d, d_sum_mu_d );
       /////////////////////
@@ -513,12 +509,12 @@ copass_sort::sort_template( KeyArrayT key_array,
         search_multi_down< KeyT, ArrayT, 1024 >( d_subarray, k, d_t_tilde, d_mu_d, d_sum_mu_d );
         gpuErrchk( cudaMemcpyAsync( &h_sum_mu_u, d_sum_mu_u, sizeof( position_t ), cudaMemcpyDeviceToHost ) );
         gpuErrchk( cudaMemcpy( &h_sum_mu_d, d_sum_mu_d, sizeof( position_t ), cudaMemcpyDeviceToHost ) );
-        if ( block_size < h_sum_mu_d )
+        if ( tot_part_size < h_sum_mu_d )
         {
           gpuErrchk( cudaMemcpyAsync( d_m_u, d_mu_d, k * sizeof( position_t ), cudaMemcpyDeviceToDevice ) );
           gpuErrchk( cudaMemcpyAsync( d_sum_m_u, d_sum_mu_d, sizeof( position_t ), cudaMemcpyDeviceToDevice ) );
         }
-        else if ( block_size > h_sum_mu_u )
+        else if ( tot_part_size > h_sum_mu_u )
         {
           gpuErrchk( cudaMemcpyAsync( d_m_d, d_mu_u, k * sizeof( position_t ), cudaMemcpyDeviceToDevice ) );
           gpuErrchk( cudaMemcpyAsync( d_sum_m_d, d_sum_mu_u, sizeof( position_t ), cudaMemcpyDeviceToDevice ) );
@@ -556,14 +552,17 @@ copass_sort::sort_template( KeyArrayT key_array,
     gpuErrchk( cudaMemcpy( h_part_size, d_part_size_, k * sizeof( position_t ), cudaMemcpyDeviceToHost ) );
 
     repack( h_subarray, k, h_part_size, d_buffer, buffer_size );
+
     gpuErrchk( cudaMemcpyAsync( d_subarray, h_subarray, k * sizeof( ArrayT ), cudaMemcpyHostToDevice ) );
     if ( compare_with_serial && i_sub == last_i_sub )
     {
       return 0;
     }
 
-    CopyArray< ElementT, ArrayT, AuxArrayT > <<< ( block_size + 1023 ) / 1024, 1024 >>>(
-      target_array[ i_sub ], d_aux_array );
+    CopyArray< ElementT, ArrayT, AuxArrayT > <<< ( tot_part_size + 1023 ) / 1024, 1024 >>>
+      (target_array[ i_sub ], d_aux_array, tot_part_size );
+
+    
   }
 
   return 0;
@@ -572,8 +571,13 @@ copass_sort::sort_template( KeyArrayT key_array,
 
 template < class KeyT >
 int
-copass_sort::sort( KeyT* d_keys, position_t n, position_t block_size, void* d_storage, int64_t& st_bytes )
+copass_sort::sort( KeyT* d_keys, position_t n, position_t block_size, void* d_storage, int64_t& st_bytes, int64_t skip )
 {
+  if (skip >= block_size) {
+    printf("Error in copass_sort: skip parameter larger than block_size\n");
+    exit( EXIT_FAILURE );
+  }
+
   st_bytes = 0;
   uint k = ( uint ) ( ( n + block_size - 1 ) / block_size ); // number of subarrays
 
@@ -581,7 +585,7 @@ copass_sort::sort( KeyT* d_keys, position_t n, position_t block_size, void* d_st
   contiguous_array< KeyT > array_block[ k ];
   for ( uint i = 0; i < k; i++ )
   {
-    h_subarray[ i ].data_pt = d_keys;
+    h_subarray[ i ].data_pt = d_keys + skip;
     h_subarray[ i ].offset = i * block_size;
     h_subarray[ i ].size = i < k - 1 ? block_size : n - ( k - 1 ) * block_size;
     array_block[ i ] = h_subarray[ i ];
@@ -590,15 +594,19 @@ copass_sort::sort( KeyT* d_keys, position_t n, position_t block_size, void* d_st
   int64_t ext_st_bytes = 0;
   for ( uint i = 0; i < k; i++ )
   {
-    array_GPUSort( h_subarray[ i ], d_storage, ext_st_bytes );
-    if ( d_storage == NULL )
+    int64_t ext_st_bytes_tmp = 0;
+    array_GPUSort( h_subarray[ i ], d_storage, ext_st_bytes_tmp );
+    ext_st_bytes = max(ext_st_bytes, ext_st_bytes_tmp);
+    // the maximum storage requirement can be computed as the maximum between the first and second block
+    // no matter the number of blocks
+    if ( d_storage == NULL  && i > 0 )
     {
       break;
     }
   }
 
   contiguous_array< KeyT > key_array;
-  key_array.data_pt = d_keys;
+  key_array.data_pt = d_keys + skip;
   key_array.offset = 0;
   key_array.size = n;
 
@@ -649,8 +657,13 @@ copass_sort::sort( KeyT* d_keys,
   position_t n,
   position_t block_size,
   void* d_storage,
-  int64_t& st_bytes )
+		   int64_t& st_bytes, int64_t skip )
 {
+  if (skip >= block_size) {
+    printf("Error in copass_sort: skip parameter larger than block_size\n");
+    exit( EXIT_FAILURE );
+  }
+
   st_bytes = 0;
   uint k = ( uint ) ( ( n + block_size - 1 ) / block_size ); // number of subarrays
 
@@ -658,8 +671,8 @@ copass_sort::sort( KeyT* d_keys,
   contiguous_key_value< KeyT, ValueT > array_block[ k ];
   for ( uint i = 0; i < k; i++ )
   {
-    h_subarray[ i ].key_pt = d_keys;
-    h_subarray[ i ].value_pt = d_values;
+    h_subarray[ i ].key_pt = d_keys + skip;
+    h_subarray[ i ].value_pt = d_values + skip;
     h_subarray[ i ].offset = i * block_size;
     h_subarray[ i ].size = i < k - 1 ? block_size : n - ( k - 1 ) * block_size;
     array_block[ i ] = h_subarray[ i ];
@@ -668,15 +681,19 @@ copass_sort::sort( KeyT* d_keys,
   int64_t ext_st_bytes = 0;
   for ( uint i = 0; i < k; i++ )
   {
-    array_GPUSort( array_block[ i ], d_storage, ext_st_bytes );
-    if ( d_storage == NULL )
+    int64_t ext_st_bytes_tmp = 0;
+    array_GPUSort( array_block[ i ], d_storage, ext_st_bytes_tmp );
+    ext_st_bytes = max(ext_st_bytes, ext_st_bytes_tmp);
+    // the maximum storage requirement can be computed as the maximum between the first and second block
+    // no matter the number of blocks
+    if ( d_storage == NULL  && i > 0 )
     {
       break;
     }
   }
 
   contiguous_array< KeyT > key_array;
-  key_array.data_pt = d_keys;
+  key_array.data_pt = d_keys + skip;
   key_array.offset = 0;
   key_array.size = n;
 
@@ -704,25 +721,34 @@ copass_sort::sort( KeyT* d_keys,
 
 template < class KeyT >
 int
-copass_sort::sort( KeyT** key_subarray, position_t n, position_t block_size, void* d_storage, int64_t& st_bytes )
+copass_sort::sort( KeyT** key_subarray, position_t n, position_t block_size, void* d_storage, int64_t& st_bytes, int64_t skip )
 {
+  if (skip >= block_size) {
+    printf("Error in copass_sort: skip parameter larger than block_size\n");
+    exit( EXIT_FAILURE );
+  }
+  
   st_bytes = 0;
-  uint k = ( uint ) ( ( n + block_size - 1 ) / block_size ); // number of subarrays
+  uint k = ( uint ) ( ( n + skip + block_size - 1 ) / block_size ); // number of subarrays
 
   regular_block_array< KeyT > h_key_array;
   regular_block_array< KeyT > d_key_array;
 
   h_key_array.data_pt = key_subarray;
   h_key_array.block_size = block_size;
-  h_key_array.offset = 0;
+  h_key_array.offset = skip;
   h_key_array.size = n;
 
   int64_t ext_st_bytes = 0;
   for ( uint i = 0; i < k; i++ )
   {
     contiguous_array< KeyT > key_block = getBlock( h_key_array, i );
-    array_GPUSort( key_block, d_storage, ext_st_bytes );
-    if ( d_storage == NULL )
+    int64_t ext_st_bytes_tmp = 0;
+    array_GPUSort( key_block, d_storage, ext_st_bytes_tmp );
+    ext_st_bytes = max(ext_st_bytes, ext_st_bytes_tmp);
+    // the maximum storage requirement can be computed as the maximum between the first and second block
+    // no matter the number of blocks
+    if ( d_storage == NULL  && i > 0 )
     {
       break;
     }
@@ -737,7 +763,7 @@ copass_sort::sort( KeyT** key_subarray, position_t n, position_t block_size, voi
 
   d_key_array.data_pt = d_key_array_data_pt; // key_subarray;
   d_key_array.block_size = block_size;
-  d_key_array.offset = 0;
+  d_key_array.offset = skip;
   d_key_array.size = n;
 
   regular_block_array< KeyT > h_subarray[ k ];
@@ -746,8 +772,19 @@ copass_sort::sort( KeyT** key_subarray, position_t n, position_t block_size, voi
     h_subarray[ i ].h_data_pt = key_subarray;
     h_subarray[ i ].data_pt = d_key_array_data_pt; // key_subarray;
     h_subarray[ i ].block_size = block_size;
-    h_subarray[ i ].offset = i * block_size;
-    h_subarray[ i ].size = i < k - 1 ? block_size : n - ( k - 1 ) * block_size;
+    if (i == 0) {      
+      h_subarray[ i ].offset = skip;
+      h_subarray[ i ].size = std::min(n, block_size - skip);
+    }
+    else {
+      h_subarray[ i ].offset = i * block_size;
+      position_t diff = n + skip - i * block_size;
+      if ( diff <= 0 ) {
+	printf( "block index out of range in copass::sort\n" );
+	exit( EXIT_FAILURE );
+      }
+      h_subarray[ i ].size = std::min( diff, block_size );
+    }
   }
 
   sort_template< KeyT, KeyT, regular_block_array< KeyT >, regular_block_array< KeyT >, contiguous_array< KeyT > >(
@@ -771,15 +808,17 @@ copass_sort::sort( KeyT** key_subarray, position_t n, position_t block_size, voi
 
 template < class KeyT, class ValueT >
 int
-copass_sort::sort( KeyT** key_subarray,
-  ValueT** value_subarray,
-  position_t n,
-  position_t block_size,
-  void* d_storage,
-  int64_t& st_bytes )
+copass_sort::sort( KeyT** key_subarray, ValueT** value_subarray, position_t n,
+		   position_t block_size, void* d_storage, int64_t& st_bytes,
+		   int64_t skip )
 {
+  if (skip >= block_size) {
+    printf("Error in copass_sort: skip parameter larger than block_size\n");
+    exit( EXIT_FAILURE );
+  }
+
   st_bytes = 0;
-  uint k = ( uint ) ( ( n + block_size - 1 ) / block_size ); // number of subarrays
+  uint k = ( uint ) ( ( n + skip + block_size - 1 ) / block_size ); // number of subarrays
 
   regular_block_key_value< KeyT, ValueT > h_key_value;
   regular_block_array< KeyT > d_key_array;
@@ -787,15 +826,19 @@ copass_sort::sort( KeyT** key_subarray,
   h_key_value.key_pt = key_subarray;
   h_key_value.value_pt = value_subarray;
   h_key_value.block_size = block_size;
-  h_key_value.offset = 0;
+  h_key_value.offset = skip;
   h_key_value.size = n;
 
   int64_t ext_st_bytes = 0;
   for ( uint i = 0; i < k; i++ )
   {
     contiguous_key_value< KeyT, ValueT > key_value_block = getBlock( h_key_value, i );
-    array_GPUSort( key_value_block, d_storage, ext_st_bytes );
-    if ( d_storage == NULL )
+    int64_t ext_st_bytes_tmp = 0;
+    array_GPUSort( key_value_block, d_storage, ext_st_bytes_tmp );
+    ext_st_bytes = max(ext_st_bytes, ext_st_bytes_tmp);
+    // the maximum storage requirement can be computed as the maximum between the first and second block
+    // no matter the number of blocks
+    if ( d_storage == NULL  && i > 0 )
     {
       break;
     }
@@ -818,7 +861,7 @@ copass_sort::sort( KeyT** key_subarray,
 
   d_key_array.data_pt = d_key_array_data_pt;
   d_key_array.block_size = block_size;
-  d_key_array.offset = 0;
+  d_key_array.offset = skip;
   d_key_array.size = n;
 
   regular_block_key_value< KeyT, ValueT > h_subarray[ k ];
@@ -829,8 +872,19 @@ copass_sort::sort( KeyT** key_subarray,
     h_subarray[ i ].key_pt = d_key_array_data_pt;
     h_subarray[ i ].value_pt = d_value_array_data_pt;
     h_subarray[ i ].block_size = block_size;
-    h_subarray[ i ].offset = i * block_size;
-    h_subarray[ i ].size = i < k - 1 ? block_size : n - ( k - 1 ) * block_size;
+    if (i == 0) {      
+      h_subarray[ i ].offset = skip;
+      h_subarray[ i ].size = std::min(n, block_size - skip);
+    }
+    else {
+      h_subarray[ i ].offset = i * block_size;
+      position_t diff = n + skip - i * block_size;
+      if ( diff <= 0 ) {
+	printf( "block index out of range in copass::sort\n" );
+	exit( EXIT_FAILURE );
+      }
+      h_subarray[ i ].size = std::min( diff, block_size );
+    }   
   }
 
   sort_template< KeyT,

@@ -202,9 +202,9 @@ extern int* d_Ny_cumul_sum_;
 
 extern PrefixScan prefix_scan_;
 
-int Init();
+int Init(int nested_loop_algo);
 
-int Init( int Nx_max );
+int Init(int nested_loop_algo, int Nx_max);
 
 template < int i_func >
 int Run( int nested_loop_algo, int Nx, int* d_Ny );

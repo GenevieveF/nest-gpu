@@ -57,6 +57,10 @@ ConnectionTemplate< conn16b_key, conn16b_struct >::_setMaxDelayNBits( int max_de
 
   // maximum number of bits used to represent receptor port index
   max_port_nbits_ = max_port_syn_nbits_ - max_syn_nbits_ - 1;
+  if (max_port_nbits_ < 0) {
+    max_port_nbits_ = 0;
+    max_syn_nbits_ = max_port_syn_nbits_ - 1;
+  } 
 
   // bit mask used to extract port and synapse group index
   port_syn_mask_ = ( 1 << max_port_syn_nbits_ ) - 1;
@@ -90,6 +94,10 @@ ConnectionTemplate< conn16b_key, conn16b_struct >::_setMaxSynNBits( int max_syn_
 
   // maximum number of bits used to represent receptor port index
   max_port_nbits_ = max_port_syn_nbits_ - max_syn_nbits_ - 1;
+  if (max_port_nbits_ < 0) {
+    max_port_nbits_ = 0;
+    max_port_syn_nbits_ = max_syn_nbits_ + 1;
+  } 
 
   // bit mask used to extract synapse group index
   syn_mask_ = ( 1 << max_syn_nbits_ ) - 1;
@@ -115,7 +123,7 @@ template <>
 int
 ConnectionTemplate< conn16b_key, conn16b_struct >::getConnDelay( const conn16b_key& conn_key )
 {
-  return ( int ) ( ( conn_key & delay_mask_ ) >> max_port_syn_nbits_ );
+  return ( int ) ( ( conn_key & delay_mask_ ) >> max_port_syn_nbits_ ) + min_allowed_delay_;
 }
 
 template <>

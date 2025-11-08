@@ -39,7 +39,7 @@ template <>
 __device__ __forceinline__ void
 setConnDelay< conn16b_key >( conn16b_key& conn_key, int delay )
 {
-  conn_key = ( conn_key & ( ~( ( uint64_t ) DelayMask ) ) ) | ( delay << MaxPortSynNBits );
+  conn_key = ( conn_key & ( ~( ( uint64_t ) DelayMask ) ) ) | ( (delay - MinAllowedDelay) << MaxPortSynNBits );
 }
 
 template <>
@@ -74,7 +74,7 @@ template <>
 __device__ __forceinline__ int
 getConnDelay< conn16b_key >( const conn16b_key& conn_key )
 {
-  return ( int ) ( ( conn_key & DelayMask ) >> MaxPortSynNBits );
+  return ( int ) ( ( conn_key & DelayMask ) >> MaxPortSynNBits ) + MinAllowedDelay;
 }
 
 template <>

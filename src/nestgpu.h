@@ -163,6 +163,10 @@ class NESTGPU
 
   bool mpi_flag_; // true if MPI is initialized
 
+  bool mpi_bitpack_;
+
+  bool max_n_ports_warning_;
+  
   bool remote_spike_mul_;
 
   std::vector< int16_t > node_group_map_;
@@ -229,21 +233,29 @@ class NESTGPU
 
   int spike_buffer_algo_;
 
+  bool check_node_maps_;
+
+  bool first_out_conn_in_device_;
+
+  bool have_n_out_conn_;
+
+  bool delete_remote_node_map_;
+
+  bool delete_image_node_map_;
+
+  float use_all_source_node_fact_;
+  
   std::vector< int > ext_neuron_input_spike_node_;
 
   std::vector< int > ext_neuron_input_spike_port_;
 
   std::vector< float > ext_neuron_input_spike_mul_;
 
-  int setNHosts( int n_hosts );
-
-  int setThisHost( int i_host );
-
-  int CreateNodeGroup( int n_nodes, int n_ports );
+  uint CreateNodeGroup( uint n_nodes, int n_ports );
 
   int CheckUncalibrated( std::string message );
 
-  double* InitGetSpikeArray( int n_nodes, int n_ports );
+  double* InitGetSpikeArray( uint n_nodes, int n_ports );
 
   int NodeGroupArrayInit();
 
@@ -253,9 +265,9 @@ class NESTGPU
 
   int FreeNodeGroupMap();
 
-  int CheckImageNodes( int n_nodes );
+  uint CheckImageNodes( uint n_nodes );
 
-  NodeSeq _Create( std::string model_name, int n_nodes, int n_ports );
+  NodeSeq _Create( std::string model_name, uint n_nodes, int n_ports );
 
   double SpikeBufferUpdate_time_;
 
@@ -270,7 +282,11 @@ class NESTGPU
   double SendSpikeToRemote_time_;
 
   double RecvSpikeFromRemote_time_;
+  
+  double CopySpikeFromRemote_time_;
 
+  double DeliverSpikesToInputBuffers_time_;
+  
   double NestedLoop_time_;
 
   double GetSpike_time_;
@@ -287,12 +303,25 @@ class NESTGPU
 
   double RecvSpikeFromRemote_CUDAcp_time_;
 
+  double MpiBitPack_time_;
+
+  double MpiBitUnpack_time_;
+
+  int64_t SpikeNumAllgather_send_;
+  int64_t SpikeNumAllgather_send_packed_;
+  int64_t SpikeNumAllgather_recv_;
+  int64_t SpikeNumAllgather_recv_packed_;
+  
   bool first_simulation_flag_;
 
 public:
   NESTGPU();
 
   ~NESTGPU();
+
+  int setNHosts( int n_hosts );
+
+  int setThisHost( int i_host );
 
   int SetRandomSeed( unsigned long long seed );
 
@@ -321,6 +350,7 @@ public:
   SetVerbosityLevel( int verbosity_level )
   {
     verbosity_level_ = verbosity_level;
+    verbose_print_ns::verbosity_level_ = verbosity_level;
     return 0;
   }
 
@@ -330,6 +360,13 @@ public:
   SetPrintTime( bool print_time )
   {
     print_time_ = print_time;
+    return 0;
+  }
+
+  inline int
+  SetCheckNodeMaps( bool check_node_maps )
+  {
+    check_node_maps_ = check_node_maps;
     return 0;
   }
 
@@ -385,7 +422,7 @@ public:
   int GetIntParam( std::string param_name );
   int SetIntParam( std::string param_name, int val );
 
-  NodeSeq Create( std::string model_name, int n_nodes = 1, int n_ports = 1 );
+  NodeSeq Create( std::string model_name, uint n_nodes = 1, int n_ports = 1 );
 
   RemoteNodeSeq RemoteCreate( int i_host, std::string model_name, inode_t n_nodes = 1, int n_ports = 1 );
 
@@ -589,9 +626,9 @@ public:
 
   int SimulationStep();
 
-  int EndSimulation();
+  int PrintTimers(int verbosity_level = 5);
 
-  int ConnectMpiInit( int argc, char* argv[] );
+  int ConnectMpiInit();
 
   int FakeConnectMpiInit(int n_hosts, int this_host);
 
@@ -936,6 +973,50 @@ public:
   int RecvSpikeFromRemote();
 
   int organizeExternalSpikes( int n_ext_spikes );
+
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////
+  // Build connections with fixed indegree rule for source neurons and target neurons distributed across
+  // MPI processes (hosts)
+  // Case with both source and target nodes contiguous, represented by starting index and number of nodes 
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////
+  int ConnectDistributedFixedIndegree
+  (int *source_host_arr, int n_source_host, inode_t *source_arr, inode_t *n_source_arr,
+   int *target_host_arr, int n_target_host, inode_t *target_arr, inode_t *n_target_arr,
+   int indegree, int i_host_group, SynSpec &syn_spec);
+  
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////
+  // Build connections with fixed indegree rule for source neurons and target neurons distributed across
+  // MPI processes (hosts)
+  // Case with source nodes stored in an array,
+  // target nodes contiguous, represented by starting index and number of nodes 
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////
+  int ConnectDistributedFixedIndegree
+  (int *source_host_arr, int n_source_host, inode_t **source_arr, inode_t *n_source_arr,
+   int *target_host_arr, int n_target_host, inode_t *target_arr, inode_t *n_target_arr,
+   int indegree, int i_host_group, SynSpec &syn_spec);
+
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////
+  // Build connections with fixed indegree rule for source neurons and target neurons distributed across
+  // MPI processes (hosts)
+  // Case with source nodes contiguous, represented by starting index and number of nodes,
+  // target nodes stored in an array
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////
+  int ConnectDistributedFixedIndegree
+  (int *source_host_arr, int n_source_host, inode_t *source_arr, inode_t *n_source_arr,
+   int *target_host_arr, int n_target_host, inode_t **target_arr, inode_t *n_target_arr,
+   int indegree, int i_host_group, SynSpec &syn_spec);
+
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////
+  // Build connections with fixed indegree rule for source neurons and target neurons distributed across
+  // MPI processes (hosts)
+  // Case with both source nodes and target nodes stored in arrays
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////
+  int ConnectDistributedFixedIndegree
+  (int *source_host_arr, int n_source_host, inode_t **source_arr, inode_t *n_source_arr,
+   int *target_host_arr, int n_target_host, inode_t **target_arr, inode_t *n_target_arr,
+   int indegree, int i_host_group, SynSpec &syn_spec);
+
+  
 };
 
 #endif

@@ -42,6 +42,8 @@ __device__ float* spike_mul_;
 // number of spikes emitted at current time step
 __device__ int* n_spikes_;
 
+__device__ bool have_n_out_conn_;
+
 // Initialize input spike buffer pointers in device memory
 __global__ void
 initInputSpikeBufferPointersKernel( int* n_input_ports,
@@ -118,6 +120,18 @@ initFirstOutConnectionKernel( inode_t n_nodes, int64_t* first_out_connection )
     return;
   }
   first_out_connection[ i_node ] = -1;
+}
+
+// Initialize array of spike multiplicity from remote nodes to 1
+__global__ void
+initSpikeMulKernel( int n_spikes, float* spike_mul )
+{
+  inode_t i_spike = blockIdx.x * blockDim.x + threadIdx.x;
+  if ( i_spike >= n_spikes )
+  {
+    return;
+  }
+  spike_mul[ i_spike ] = 1;
 }
 
 

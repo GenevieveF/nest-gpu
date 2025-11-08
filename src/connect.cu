@@ -82,6 +82,9 @@ __device__ uint PortMask;
 // bit mask used to extract port and synapse group index
 __device__ uint PortSynMask;
 
+// minimum allowed delay in time step units
+__constant__ uint MinAllowedDelay;
+
 // ig0 = ConnGroupIdx0[i_spike_buffer] is the index in the whole
 // connection-group array of the first connection group outgoing
 // from the node i_spike_buffer
@@ -263,4 +266,29 @@ Connection::isConnectionIntParam( std::string param_name )
   {
     return 0;
   }
+}
+
+// set minimum allowed delay
+int
+Connection::setMinAllowedDelay(float min_allowed_delay_float)
+{
+  int min_allowed_delay = (int) round (min_allowed_delay_float / time_resolution_);
+  if (min_allowed_delay < 1) {
+    throw ngpu_exception("Minimum allowed delay cannot be smaller than the time resolution");
+  }
+  min_allowed_delay_ = min_allowed_delay; // note that min_allowed_delay_ is unsigned
+                                          // this is why an additional (signed) variable is used
+                                          // for the previous check
+
+  // std::cout << "min_allowed_delay_: " << min_allowed_delay_ << "\n";
+  gpuErrchk( cudaMemcpyToSymbol( MinAllowedDelay, &min_allowed_delay_, sizeof( uint ) ) );
+
+  return 0;
+}
+
+// get minimum allowed delay
+float
+Connection::getMinAllowedDelay()
+{
+  return time_resolution_ * min_allowed_delay_;
 }

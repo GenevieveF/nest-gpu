@@ -108,9 +108,9 @@ PushSpike( int i_spike_buffer, float mul )
       uint pos = atomicAdd( input_spike_buffer_ns::n_spikes_, 1 );
       spike_first_connection_[ pos ] = i_conn;
       spike_mul_[ pos ] = mul;
-#ifdef HAVE_N_OUT_CONNECTIONS
-      spike_n_connections_[ pos ] = n_out_connections_[ i_spike_buffer ];
-#endif
+      if (input_spike_buffer_ns::have_n_out_conn_) {
+	spike_n_connections_[ pos ] = n_out_connections_[ i_spike_buffer ];
+      }
       //printf("PushSpike i_spike_buffer: %d\ti_conn: %ld\tpos: %d\tspike_first_connection[pos]: %ld\n",
       //i_spike_buffer, i_conn, pos, spike_first_connection_[pos]);
     }
@@ -344,9 +344,10 @@ InitLastSpikeTimeIdx( unsigned int n_spike_buffers, int spike_time_idx )
 }
 
 int
-spikeBufferInit( uint n_spike_buffers, int max_spike_buffer_size, int spike_buffer_algo )
+  spikeBufferInit( uint n_local_nodes, uint n_image_nodes, int max_spike_buffer_size, int spike_buffer_algo )
 {
-  // unsigned int n_spike_buffers = net_connection->connection_.size();
+  uint n_spike_buffers = (spike_buffer_algo == INPUT_SPIKE_BUFFER_ALGO) ? n_local_nodes : ( n_local_nodes + n_image_nodes ); 
+  
   h_NSpikeBuffer = n_spike_buffers;
 
   CUDAMALLOCCTRL( "&d_LastSpikeTimeIdx", &d_LastSpikeTimeIdx, n_spike_buffers * sizeof( long long ) );

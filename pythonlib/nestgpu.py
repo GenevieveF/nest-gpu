@@ -1574,18 +1574,10 @@ def Simulate(sim_time=1000.0):
 
 
 NESTGPU_ConnectMpiInit = _nestgpu.NESTGPU_ConnectMpiInit
-NESTGPU_ConnectMpiInit.argtypes = (ctypes.c_int, ctypes.POINTER(c_char_p))
 NESTGPU_ConnectMpiInit.restype = ctypes.c_int
 def ConnectMpiInit():
     "Initialize MPI connectivity"
-    argc=len(sys.argv)
-    array_char_pt_type = c_char_p * argc
-    c_var_name_list=[]
-    for i in range(argc):
-        c_arg = ctypes.create_string_buffer(to_byte_str(sys.argv[i]), len(sys.argv[i])+1)
-        c_var_name_list.append(c_arg)        
-    ret = NESTGPU_ConnectMpiInit(ctypes.c_int(argc),
-                                   array_char_pt_type(*c_var_name_list))
+    ret = NESTGPU_ConnectMpiInit()
     if GetErrorCode() != 0:
         raise ValueError(GetErrorMessage())
     return ret
@@ -1597,6 +1589,16 @@ def FakeConnectMpiInit(n_hosts, this_host):
     "Initialize fake MPI connectivity"
     ret = NESTGPU_FakeConnectMpiInit(ctypes.c_int(n_hosts),
                                      ctypes.c_int(this_host))
+    if GetErrorCode() != 0:
+        raise ValueError(GetErrorMessage())
+    return ret
+
+NESTGPU_SetNHosts = _nestgpu.NESTGPU_SetNHosts
+NESTGPU_SetNHosts.argtypes = (ctypes.c_int, )
+NESTGPU_SetNHosts.restype = ctypes.c_int
+def SetNHosts(n_hosts):
+    "Set number of hosts when it should differ from number of MPI processes"
+    ret = NESTGPU_SetNHosts(ctypes.c_int(n_hosts))
     if GetErrorCode() != 0:
         raise ValueError(GetErrorMessage())
     return ret
@@ -3134,3 +3136,182 @@ def RemoteCreate(i_host, model_name, n_node=1, n_ports=1, status_dict=None):
     if GetErrorCode() != 0:
         raise ValueError(GetErrorMessage())
     return ret
+
+
+
+
+
+NESTGPU_ConnectDistributedFixedIndegreeSeqSeq = _nestgpu.NESTGPU_ConnectDistributedFixedIndegreeSeqSeq
+NESTGPU_ConnectDistributedFixedIndegreeSeqSeq.argtypes = (ctypes.c_void_p, ctypes.c_int,
+                                                          ctypes.c_void_p, ctypes.c_void_p,
+                                                          ctypes.c_void_p, ctypes.c_int,
+                                                          ctypes.c_void_p, ctypes.c_void_p,
+                                                          ctypes.c_int, ctypes.c_int)
+
+NESTGPU_ConnectDistributedFixedIndegreeSeqSeq.restype = ctypes.c_int
+
+NESTGPU_ConnectDistributedFixedIndegreeGroupSeq = _nestgpu.NESTGPU_ConnectDistributedFixedIndegreeGroupSeq
+NESTGPU_ConnectDistributedFixedIndegreeGroupSeq.argtypes = (ctypes.c_void_p, ctypes.c_int,
+                                                            ctypes.c_void_p, ctypes.c_void_p,
+                                                            ctypes.c_void_p, ctypes.c_int,
+                                                            ctypes.c_void_p, ctypes.c_void_p,
+                                                            ctypes.c_int, ctypes.c_int)
+
+NESTGPU_ConnectDistributedFixedIndegreeGroupSeq.restype = ctypes.c_int
+
+NESTGPU_ConnectDistributedFixedIndegreeSeqGroup = _nestgpu.NESTGPU_ConnectDistributedFixedIndegreeSeqGroup
+NESTGPU_ConnectDistributedFixedIndegreeSeqGroup.argtypes = (ctypes.c_void_p, ctypes.c_int,
+                                                            ctypes.c_void_p, ctypes.c_void_p,
+                                                            ctypes.c_void_p, ctypes.c_int,
+                                                            ctypes.c_void_p, ctypes.c_void_p,
+                                                            ctypes.c_int, ctypes.c_int)
+
+NESTGPU_ConnectDistributedFixedIndegreeSeqGroup.restype = ctypes.c_int
+
+NESTGPU_ConnectDistributedFixedIndegreeGroupGroup = _nestgpu.NESTGPU_ConnectDistributedFixedIndegreeGroupGroup
+NESTGPU_ConnectDistributedFixedIndegreeGroupGroup.argtypes = (ctypes.c_void_p, ctypes.c_int,
+                                                              ctypes.c_void_p, ctypes.c_void_p,
+                                                              ctypes.c_void_p, ctypes.c_int,
+                                                              ctypes.c_void_p, ctypes.c_void_p,
+                                                              ctypes.c_int, ctypes.c_int)
+
+NESTGPU_ConnectDistributedFixedIndegreeGroupSeq.restype = ctypes.c_int
+
+
+def ConnectDistributedFixedIndegree(source_host_list, source_group_list, target_host_list, target_group_list,
+                                    indegree, host_group, syn_dict):
+    "Connect a list of source node groups to a list of target node groups on different mpi hosts with the \
+    fixed-indegree rule"
+    if (type(source_host_list)!=list and type(source_host_list)!=tuple) or \
+       (type(target_host_list)!=list and type(target_host_list)!=tuple):
+        raise ValueError("Error in host list type")
+    if (type(source_group_list)!=list) and (type(source_group_list)!=tuple):
+        raise ValueError("Unknown source group list type")
+    if len(source_host_list) != len(source_group_list):
+        raise ValueError("Inconsistent size of source_host_list and source_group_list")
+    if (type(source_group_list[0])==NodeSeq):
+        for source_group in source_group_list:
+            if (type(source_group)!=NodeSeq):
+                raise ValueError("Inconsistent source group types")
+    elif (type(source_group_list[0])==list or type(source_group_list[0])==tuple):
+        for source_group in source_group_list:
+            if (type(source_group)!=list and type(source_group)!=tuple):
+                raise ValueError("Inconsistent source group types")
+    else:
+        raise ValueError("Unknown source node type")
+        
+    if (type(target_group_list)!=list) and (type(target_group_list)!=tuple):
+        raise ValueError("Unknown target group list type")
+    if len(target_host_list) != len(target_group_list):
+        raise ValueError("Inconsistent size of target_host_list and target_group_list")
+
+    if (type(target_group_list[0])==NodeSeq):
+        for target_group in target_group_list:
+            if (type(target_group)!=NodeSeq):
+                raise ValueError("Inconsistent target group types")
+    elif (type(target_group_list[0])==list or type(target_group_list[0])==tuple):
+        for target_group in target_group_list:
+            if (type(target_group)!=list and type(target_group)!=tuple):
+                raise ValueError("Inconsistent target group types")
+    else:
+        raise ValueError("Unknown target node type")
+
+    gc.disable() # temporarily disable garbage collection
+    SynSpecInit()
+        
+    #array_size = RuleArraySize(conn_dict, source, target)    # not used for now
+        
+    for param_name in syn_dict:
+        if SynSpecIsIntParam(param_name):
+            SetSynSpecIntParam(param_name, syn_dict[param_name])
+        elif SynSpecIsFloatParam(param_name):
+            fpar = syn_dict[param_name]
+            #if (type(fpar)==dict): # not used for now
+            #    SetSynParamFromArray(param_name, fpar, array_size)
+            #else:
+            SetSynSpecFloatParam(param_name, fpar)
+                
+        elif SynSpecIsFloatPtParam(param_name):
+            SetSynSpecFloatPtParam(param_name, syn_dict[param_name])
+        else:
+            raise ValueError("Unknown synapse parameter")
+
+    source_host_arr = (ctypes.c_int * len(source_host_list))(*source_host_list)
+    source_host_arr_pt = ctypes.cast(source_host_arr, ctypes.c_void_p)
+    target_host_arr = (ctypes.c_int * len(target_host_list))(*target_host_list)
+    target_host_arr_pt = ctypes.cast(target_host_arr, ctypes.c_void_p)
+    
+    if (type(source_group_list[0])==NodeSeq):
+        source_i0_list = []
+        source_n_list = []
+        for source_seq in source_group_list:
+            source_i0_list.append(source_seq.i0)
+            source_n_list.append(source_seq.n)    
+        
+        source_i0_arr = (ctypes.c_int * len(source_i0_list))(*source_i0_list)
+        source_i0_arr_pt = ctypes.cast(source_i0_arr, ctypes.c_void_p)
+    else:
+        source_pt_list = []
+        source_n_list = []
+        for source_group in source_group_list:
+            source_arr = (ctypes.c_int * len(source_group))(*source_group) 
+            source_arr_pt = ctypes.cast(source_arr, ctypes.c_void_p)    
+            source_pt_list.append(source_arr_pt)
+            source_n_list.append(len(source_group))
+        source_pt_arr = (ctypes.c_void_p * len(source_pt_list))(*source_pt_list)
+        
+    source_n_arr = (ctypes.c_int * len(source_n_list))(*source_n_list)
+    source_n_arr_pt = ctypes.cast(source_n_arr, ctypes.c_void_p)
+
+    if (type(target_group_list[0])==NodeSeq):
+        target_i0_list = []
+        target_n_list = []
+        for target_seq in target_group_list:
+            target_i0_list.append(target_seq.i0)
+            target_n_list.append(target_seq.n)    
+        
+        target_i0_arr = (ctypes.c_int * len(target_i0_list))(*target_i0_list)
+        target_i0_arr_pt = ctypes.cast(target_i0_arr, ctypes.c_void_p)
+    else:
+        target_pt_list = []
+        target_n_list = []
+        for target_group in target_group_list:
+            target_arr = (ctypes.c_int * len(target_group))(*target_group) 
+            target_arr_pt = ctypes.cast(target_arr, ctypes.c_void_p)    
+            target_pt_list.append(target_arr_pt)
+            target_n_list.append(len(target_group))
+        target_pt_arr = (ctypes.c_void_p * len(target_pt_list))(*target_pt_list)
+
+    target_n_arr = (ctypes.c_int * len(target_n_list))(*target_n_list) 
+    target_n_arr_pt = ctypes.cast(target_n_arr, ctypes.c_void_p)
+        
+    if (type(source_group_list[0])==NodeSeq) and (type(target_group_list[0])==NodeSeq):
+        ret = NESTGPU_ConnectDistributedFixedIndegreeSeqSeq \
+            (source_host_arr_pt, len(source_host_list), source_i0_arr_pt, source_n_arr_pt, \
+             target_host_arr_pt, len(target_host_list), target_i0_arr_pt, target_n_arr_pt, \
+             indegree, host_group)
+
+    elif (type(source_group_list[0])==NodeSeq) and (type(target_group_list[0])!=NodeSeq):
+        ret = NESTGPU_ConnectDistributedFixedIndegreeSeqGroup \
+            (source_host_arr_pt, len(source_host_list), source_i0_arr_pt, source_n_arr_pt, \
+             target_host_arr_pt, len(target_host_list), target_pt_arr, target_n_arr_pt, \
+             indegree, host_group)
+
+    elif (type(source_group_list[0])!=NodeSeq) and (type(target_group_list[0])==NodeSeq):
+        ret = NESTGPU_ConnectDistributedFixedIndegreeGroupSeq \
+            (source_host_arr_pt, len(source_host_list), source_pt_arr, source_n_arr_pt, \
+             target_host_arr_pt, len(target_host_list), target_i0_arr_pt, target_n_arr_pt, \
+             indegree, host_group)
+
+    else:
+        ret = NESTGPU_ConnectDistributedFixedIndegreeGroupGroup \
+            (source_host_arr_pt, len(source_host_list), source_pt_arr, source_n_arr_pt, \
+             target_host_arr_pt, len(target_host_list), target_pt_arr, target_n_arr_pt, \
+             indegree, host_group)
+
+    if GetErrorCode() != 0:
+        raise ValueError(GetErrorMessage())
+    
+    gc.enable()
+    return ret
+

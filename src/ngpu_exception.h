@@ -27,9 +27,37 @@
 
 #ifndef NGPUEXCEPTION_H
 #define NGPUEXCEPTION_H
+#include <iostream>
 #include <cstring>
 #include <exception>
 #include <string>
+
+#ifdef HAVE_MPI
+#include <mpi.h>
+#endif
+
+inline std::string
+MPIRankString()
+{
+
+#ifdef HAVE_MPI
+  int initialized;
+  MPI_Initialized( &initialized );
+  if ( initialized ) {
+    int proc_num;
+    MPI_Comm_size( MPI_COMM_WORLD, &proc_num );
+    if ( proc_num > 1 ) {
+      int mpi_id;
+      MPI_Comm_rank( MPI_COMM_WORLD, &mpi_id );
+      return std::string("MPI rank: ") + std::to_string(mpi_id) + "\t";
+    }
+  }
+#endif
+
+  return "";
+}
+
+
 
 ///////////////////////////////////
 // ngpu_exception class definition
@@ -58,19 +86,34 @@ public:
 };
 
 #define BEGIN_TRY try
-#define END_TRY                                 \
-  catch ( ngpu_exception & e )                  \
-  {                                             \
-    std::cerr << "Error: " << e.what() << "\n"; \
-  }                                             \
-  catch ( bad_alloc& )                          \
-  {                                             \
-    std::cerr << "Error allocating memory."     \
-              << "\n";                          \
-  }                                             \
-  catch ( ... )                                 \
-  {                                             \
-    std::cerr << "Unrecognized error\n";        \
+#define END_TRY                                                         \
+  catch ( ngpu_exception & e )                                          \
+  {                                                                     \
+    std::cerr << MPIRankString() << "Error: " << e.what() << "\n";	\
+  }                                                                     \
+  catch ( bad_alloc& )                                                  \
+  {                                                                     \
+    std::cerr << MPIRankString() << "Error allocating memory."          \
+              << "\n";                                                  \
+  }                                                                     \
+  catch ( ... )                                                         \
+  {                                                                     \
+    std::cerr << MPIRankString() << "Unrecognized error\n";             \
   }
 
+
+namespace verbose_print_ns
+{
+  extern int verbosity_level_;
+}
+
+inline void verbosePrint(std::string message, int verbosity_threshold = 3)
+{
+  if (verbose_print_ns::verbosity_level_ >= verbosity_threshold) {
+    std::cout << MPIRankString() << message << "\n";
+  }
+}
+
+
 #endif
+

@@ -250,7 +250,7 @@ array_GPUSort( contiguous_key_value< KeyT, ValueT >& arr_in, void* d_storage, in
     arr_out.value_pt,
     num_elems );
   //<END-CLANG-TIDY-SKIP>//
-
+  
   if ( d_storage != NULL )
   {
     void* d_sort_storage = ( void* ) ( ( char* ) d_storage + ext_st_bytes );
@@ -263,7 +263,7 @@ array_GPUSort( contiguous_key_value< KeyT, ValueT >& arr_in, void* d_storage, in
       arr_out.value_pt,
       num_elems );
     //<END-CLANG-TIDY-SKIP>//
-
+    
     gpuErrchk( cudaMemcpyAsync(
       arr_in.key_pt + arr_in.offset, arr_out.key_pt, num_elems * sizeof( KeyT ), cudaMemcpyDeviceToDevice ) );
     gpuErrchk( cudaMemcpy(
@@ -324,16 +324,20 @@ getBlock( regular_block_key_value< KeyT, ValueT >& arr, int i_block )
   contiguous_key_value< KeyT, ValueT > c_arr;
   c_arr.key_pt = arr.key_pt[ i_block ];
   c_arr.value_pt = arr.value_pt[ i_block ];
-  c_arr.offset = 0;
+  c_arr.offset = (i_block == 0) ? arr.offset : 0;
 
-  position_t diff = arr.size - i_block * arr.block_size;
-  if ( diff <= 0 )
-  {
-    printf( "i_block out of range in getBlock\n" );
-    exit( 0 );
+  if (i_block == 0) {
+    c_arr.size = std::min( arr.size, arr.block_size - arr.offset);
   }
-  c_arr.size = std::min( diff, arr.block_size );
-
+  else {
+    position_t diff = arr.size + arr.offset - i_block * arr.block_size;
+    if ( diff <= 0 ) {
+      printf( "i_block out of range in getBlock\n" );
+      exit( EXIT_FAILURE );
+    }
+    c_arr.size = std::min( diff, arr.block_size );
+  }
+  
   return c_arr;
 }
 
@@ -507,16 +511,20 @@ getBlock( regular_block_array< ElementT >& arr, int i_block )
 {
   contiguous_array< ElementT > c_arr;
   c_arr.data_pt = arr.data_pt[ i_block ];
-  c_arr.offset = 0;
-
-  position_t diff = arr.size - i_block * arr.block_size;
-  if ( diff <= 0 )
-  {
-    printf( "i_block out of range in getBlock\n" );
-    exit( 0 );
+  c_arr.offset = (i_block == 0) ? arr.offset : 0;
+  
+  if (i_block == 0) {
+    c_arr.size = std::min( arr.size, arr.block_size - arr.offset);
   }
-  c_arr.size = std::min( diff, arr.block_size );
-
+  else {
+    position_t diff = arr.size + arr.offset - i_block * arr.block_size;
+    if ( diff <= 0 ) {
+      printf( "i_block out of range in getBlock\n" );
+      exit( EXIT_FAILURE );
+    }
+    c_arr.size = std::min( diff, arr.block_size );
+  }
+  
   return c_arr;
 }
 
@@ -906,8 +914,8 @@ prefix_scan( ElementT* array_in, ElementT* array_out, uint k, uint n )
   }
 }
 
-// trova num. di elementi dell'array < val
-// in un array ordinato array[i+1]>=array[i]
+// Find number of elements < val
+// in a sorted array array[i+1]>=array[i]
 template < class ElementT, uint bsize >
 __global__ void
 search_down( ElementT* array, position_t size, ElementT val, position_t* num_down )
@@ -918,8 +926,8 @@ search_down( ElementT* array, position_t size, ElementT val, position_t* num_dow
   search_block_down< ElementT, contiguous_array< ElementT >, bsize >( arr, size, val, num_down );
 }
 
-// trova num. di elementi dell'array <= val
-// in un array ordinato array[i+1]>=array[i]
+// Find number of elements <= val
+// in a sorted array array[i+1]>=array[i]
 template < class ElementT, uint bsize >
 __global__ void
 search_up( ElementT* array, position_t size, ElementT val, position_t* num_up )
@@ -1159,10 +1167,10 @@ extract_partitions_kernel( ArrayT* subarray,
 
 template < class ElementT, class TargetArray, class SourceArray >
 void __global__
-CopyArray( TargetArray target_arr, SourceArray source_arr )
+CopyArray( TargetArray target_arr, SourceArray source_arr, int64_t arr_size )
 {
   position_t i = blockIdx.x * blockDim.x + threadIdx.x;
-  if ( i >= source_arr.size )
+  if ( i >= arr_size )
   {
     return;
   }
@@ -1406,6 +1414,59 @@ repack( ArrayT* h_subarray, uint k, position_t* part_size, char* d_buffer, posit
     Translate( h_subarray[ i_arr ], transl, d_buffer, buffer_size );
     transl += psize;
   }
+}
+
+// Find number of elements < val in a sorted block array of size array_size
+// starting from position pos0
+template<class T>
+int64_t search_block_array_down(T** array, int64_t array_size, int64_t block_size, T val, int64_t pos0=0)
+{
+  int ib0 = (int)(pos0 / block_size);
+  int ib1 = (int)((array_size - 1) / block_size);
+  
+  int64_t n_down = array_size; // this is the result if the loop on the blocks reaches the end without break
+
+  // loop on blocks
+  for (int ib=ib0; ib<=ib1; ib++) {
+    T first_val_in_block; // first value in the block
+    T last_val_in_block;  // last value in the block
+    // index of first element in the block
+    int64_t i0 = (ib == ib0) ? (pos0 % block_size) : 0;
+    gpuErrchk(cudaMemcpy( &first_val_in_block, &array[ib][i0], sizeof(T), cudaMemcpyDeviceToHost ) );
+    if (first_val_in_block >= val) {
+      n_down = ib*block_size + i0;
+      break;
+    }
+    // index of last element in the block
+    int64_t i1 = (ib == ib1) ? ((array_size - 1) % block_size) : (block_size - 1);
+    gpuErrchk(cudaMemcpy( &last_val_in_block, &array[ib][i1], sizeof(T), cudaMemcpyDeviceToHost ) );
+    if (last_val_in_block == val) {
+      n_down = ib*block_size + i1;
+      break;
+    }
+    else if (val < last_val_in_block) {
+      // search the value in the block
+      int64_t *d_position;
+      CUDAMALLOCCTRL( "&d_position", &d_position, sizeof(int64_t) );     
+
+      // Find number of elements < val in the sorted (map) array
+      search_down< T, 1024 > <<< 1, 1024 >>>(array[ib] + i0, i1 - i0 + 1, val, d_position);
+      DBGCUDASYNC;
+      // Copy position from GPU to CPU memory
+      int64_t h_position;
+      gpuErrchk( cudaMemcpy( &h_position, d_position, sizeof( int64_t ), cudaMemcpyDeviceToHost ) );
+      n_down = ib*block_size + i0 + h_position;
+      // check if found
+      if (n_down < pos0 || n_down > array_size) {
+	printf("ib: %d\tblock_size: %ld\ti0: %ld\th_position: %ld\tn_down: %ld\n",
+	       ib, block_size, i0, h_position, n_down);
+	throw ngpu_exception( "Inconsistent position in search_block_array_down" );
+      }
+      break;
+    }
+  }
+  
+  return n_down;
 }
 
 #endif

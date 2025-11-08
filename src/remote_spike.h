@@ -23,6 +23,8 @@
 #ifndef REMOTE_SPIKE_H
 #define REMOTE_SPIKE_H
 
+#include <vector>
+
 extern __constant__ bool have_remote_spike_mul;
 
 __global__ void PushSpikeFromRemote( uint n_spikes, uint* spike_buffer_id, float* spike_mul );
@@ -92,6 +94,7 @@ extern uint* d_ExternalSourceSpikeIdx0;
 
 extern std::vector<uint> h_ExternalTargetSpikeNum;
 extern std::vector< std::vector< int > > h_ExternalSourceSpikeNum;
+extern std::vector< std::vector< int > > h_ExternalSourceSpikeNumBitPacked;
 extern std::vector< uint > h_ExternalSourceSpikeIdx0;
 extern std::vector< uint > h_ExternalTargetSpikeNodeId;
 extern std::vector< std::vector < uint > > h_ExternalSourceSpikeNodeId;
@@ -131,7 +134,7 @@ DeviceExternalSpikeInit( uint n_hosts,
   uint* ext_host_group_spike_idx0,
   uint* ext_host_group_spike_node_id,
   float* ext_host_group_spike_mul
- );
+);
 
 // initialize external spike array pointers in the GPU
 // (version without spike multiplicity)
@@ -152,7 +155,7 @@ DeviceExternalSpikeInit( uint n_hosts,
   uint* ext_host_group_spike_num,
   uint* ext_host_group_spike_idx0,
   uint* ext_host_group_spike_node_id
- );
+);
 
 
 #endif
